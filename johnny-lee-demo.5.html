@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Head Tracking for Desktop VR — Johnny Lee Style</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    font-family: 'Courier New', monospace;
+  }
+
+  /* Main 3D scene canvas fills the screen */
+  #scene {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* ── HUD overlay (top-left, just like Johnny's) ── */
+  #hud {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Small camera preview */
+  .cam-box {
+    position: relative;
+    width: 160px;
+    background: #000;
+    border: 1px solid #0f0;
+  }
+
+  #vid {
+    width: 100%;
+    aspect-ratio: 4/3;
+    object-fit: cover;
+    transform: scaleX(-1);
+    display: block;
+    opacity: 0.85;
+  }
+
+  #camOverlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(-1);
+  }
+
+  /* IR dot indicator panel — mimics Johnny's Wii IR display */
+  .ir-panel {
+    width: 160px;
+    height: 80px;
+    background: #000;
+    border: 1px solid #0f0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .ir-label {
+    position: absolute;
+    top: 3px; left: 5px;
+    color: #0f0;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    opacity: 0.7;
+  }
+
+  #irDot {
+    position: absolute;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #0ff;
+    box-shadow: 0 0 6px #0ff;
+    transform: translate(-50%, -50%);
+    transition: left 0.05s, top 0.05s;
+    left: 50%; top: 50%;
+  }
+
+  /* Status text */
+  .status-line {
+    color: #0f0;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 4px #0f0;
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .hud-btn {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid #0f0;
+    color: #0f0;
+    cursor: pointer;
+    text-shadow: 0 0 4px #0f0;
+  }
+  .hud-btn:hover { background: rgba(0,255,0,0.1); }
+
+  /* Title card — matches Johnny's black title screen style */
+  #titleCard {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 50;
+    transition: opacity 0.5s;
+  }
+  #titleCard.hidden { opacity: 0; pointer-events: none; }
+
+  .title-main {
+    color: #fff;
+    font-size: clamp(14px, 2.5vw, 22px);
+    letter-spacing: 0.05em;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .title-sub {
+    color: #888;
+    font-size: clamp(10px, 1.5vw, 13px);
+    letter-spacing: 0.1em;
+    text-align: center;
+  }
+
+  .title-credit {
+    color: #555;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  .spinner {
+    width: 24px; height: 24px;
+    border: 2px solid #333;
+    border-top-color: #0f0;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #loadMsg { color: #0f0; font-size: 11px; letter-spacing: 0.1em; }
+
+  .start-btn {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    padding: 10px 24px;
+    background: transparent;
+    border: 1px solid #0f0;
+    color: #0f0;
+    cursor: pointer;
+    text-shadow: 0 0 6px #0f0;
+    box-shadow: 0 0 10px rgba(0,255,0,0.2);
+  }
+  .start-btn:hover { background: rgba(0,255,0,0.1); }
+</style>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<!-- Title / loading card -->
+<div id="titleCard">
+  <div class="title-main">
+    Head Tracking for Desktop VR Displays<br>using the Webcam
+  </div>
+  <div class="title-sub">
+    Based on Johnny Chung Lee, Carnegie Mellon University (2007)
+  </div>
+  <div class="spinner" id="spinner"></div>
+  <div id="loadMsg">Loading face detection models...</div>
+  <button class="start-btn" id="startBtn" style="display:none">ENABLE CAMERA</button>
+  <div class="title-credit">
+    Move your head left/right/closer to see the 3D effect
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="cam-box">
+    <video id="vid" autoplay muted playsinline></video>
+    <canvas id="camOverlay"></canvas>
+  </div>
+
+  <!-- IR dot tracker panel -->
+  <div class="ir-panel">
+    <div class="ir-label">HEAD POSITION</div>
+    <div id="irDot"></div>
+  </div>
+
+  <div class="status-line" id="statusLine">DEMO MODE</div>
+
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+    <span style="color:#0f0;font-size:10px;letter-spacing:0.08em;text-shadow:0 0 4px #0f0;white-space:nowrap;">DEPTH</span>
+    <input type="range" id="depthSlider" min="50" max="700" step="10" value="700"
+      style="-webkit-appearance:none;flex:1;height:3px;background:rgba(0,255,0,0.3);outline:none;cursor:pointer;">
+    <span id="depthVal" style="color:#0f0;font-size:10px;font-family:'Courier New',monospace;text-shadow:0 0 4px #0f0;width:28px;text-align:right;">700</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+    <span style="color:#0f0;font-size:10px;letter-spacing:0.08em;text-shadow:0 0 4px #0f0;white-space:nowrap;">EXAG</span>
+    <input type="range" id="exagSlider" min="0.1" max="4" step="0.1" value="1"
+      style="-webkit-appearance:none;flex:1;height:3px;background:rgba(0,255,0,0.3);outline:none;cursor:pointer;">
+    <span id="exagVal" style="color:#0f0;font-size:10px;font-family:'Courier New',monospace;text-shadow:0 0 4px #0f0;width:22px;text-align:right;">1.0</span>
+  </div>
+  <div class="btn-row">
+    <button class="hud-btn" id="toggleGrid">GRID</button>
+    <button class="hud-btn" id="toggleTargets">TARGETS</button>
+    <button class="hud-btn" id="toggleStadium">STADIUM</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+<script>
+(() => {
+'use strict';
+
+// ─── State ────────────────────────────────────────────────────────
+let headX = 0, headY = 0, headDist = 500;
+let smoothX = 0, smoothY = 0, smoothDist = 500;
+let running = false;
+let animT = 0;
+let showGrid = true, showTargets = true, showStadium = false;
+const SMOOTH = 0.12;
+let exaggeration = 1.0;
+
+// ─── Canvas setup ─────────────────────────────────────────────────
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── Projection ───────────────────────────────────────────────────
+// Classic off-axis projection: head position IS the eye point.
+// All 3D points projected relative to the eye, displayed on screen plane.
+function project(px, py, pz, ex, ey, ez) {
+  // True off-axis projection: eye at (ex,ey,ez), screen fixed at z=0.
+  // Ray from eye through point P intersects screen plane, then maps to pixels.
+  // Screen world extents: x in [-SCREEN_HW, SCREEN_HW], y in [-SCREEN_HH, SCREEN_HH]
+  const dz = pz - ez;
+  if (Math.abs(dz) < 0.1) return null;
+  // Where does the ray from eye->P cross z=0?
+  const t  = -ez / dz;           // parametric t where z=0
+  if (t <= 0) return null;       // point is behind or at eye
+  const sx = ex + (px - ex) * t; // screen-space X in world units
+  const sy = ey + (py - ey) * t; // screen-space Y in world units
+  // Map world screen coords to canvas pixels
+  return {
+    x: canvas.width  / 2 + (sx / SCREEN_HW) * (canvas.width  / 2),
+    y: canvas.height / 2 - (sy / SCREEN_HH) * (canvas.height / 2),
+    s: t  // used for scaling crosshairs
+  };
+}
+
+// ─── Scene geometry ───────────────────────────────────────────────
+// Exactly like Johnny's: a room box + floating crosshair targets.
+// Coordinates: X right, Y up, Z into screen. Room centred at origin.
+// Screen plane is at Z=0; back wall at Z=DEPTH.
+
+const ROOM_W  = 900;
+const ROOM_H  = 600;
+const MAX_ROOM_D = 700;
+let   ROOM_D  = 700;
+const hw = ROOM_W / 2, hh = ROOM_H / 2;
+// Screen half-extents in world units — the fixed portal window
+const SCREEN_HW = hw;
+const SCREEN_HH = hh;
+
+// Room edges — 8 corners
+function roomCorners() {
+  return [
+    [-hw, -hh,  1], [ hw, -hh,  1], [ hw,  hh,  1], [-hw,  hh,  1], // front face (just behind screen)
+    [-hw, -hh, ROOM_D], [ hw, -hh, ROOM_D], [ hw,  hh, ROOM_D], [-hw,  hh, ROOM_D], // back
+  ];
+}
+
+const ROOM_EDGES = [
+  // Back wall
+  [4,5],[5,6],[6,7],[7,4],
+  // Connecting edges (depth lines)
+  [0,4],[1,5],[2,6],[3,7],
+  // We omit the front face — that's the screen opening
+];
+
+// Floor & ceiling grid lines
+function floorGridLines(y, z0, z1, cols) {
+  const lines = [];
+  const step  = (ROOM_W) / cols;
+  for (let i = 0; i <= cols; i++) {
+    const x = -hw + i * step;
+    lines.push([[x, y, z0], [x, y, z1]]);
+  }
+  // Cross lines (z direction)
+  const rows = Math.round(cols * ROOM_D / ROOM_W);
+  const zstep = (z1 - z0) / rows;
+  for (let i = 0; i <= rows; i++) {
+    const z = z0 + i * zstep;
+    lines.push([[-hw, y, z], [hw, y, z]]);
+  }
+  return lines;
+}
+
+function sideGridLines(x, z0, z1, rows) {
+  const lines = [];
+  const vstep = ROOM_H / rows;
+  for (let i = 0; i <= rows; i++) {
+    const y = -hh + i * vstep;
+    lines.push([[x, y, z0], [x, y, z1]]);
+  }
+  const zstep = (z1 - z0) / Math.round(rows * ROOM_D / ROOM_H);
+  const zcols = Math.round(rows * ROOM_D / ROOM_H);
+  for (let i = 0; i <= zcols; i++) {
+    const z = z0 + i * zstep;
+    lines.push([[x, -hh, z], [x, hh, z]]);
+  }
+  return lines;
+}
+
+// Floating crosshair targets (just like Johnny's)
+const TARGETS = [
+  { x:   0, y:   0, z: ROOM_D * 0.5, size: 40 },
+  { x: -250, y:  120, z: ROOM_D * 0.3, size: 30 },
+  { x:  220, y: -100, z: ROOM_D * 0.7, size: 30 },
+  { x:  -80, y: -160, z: ROOM_D * 0.85, size: 25 },
+  { x:  180, y:  180, z: ROOM_D * 0.25, size: 25 },
+];
+
+// Stadium: a simple oval with vertical lines (bleacher effect)
+function stadiumLines() {
+  const lines = [];
+  const segs = 32;
+  const ry = 180, rz = 260;
+  // Oval in the YZ plane (back of room, centred)
+  for (let i = 0; i < segs; i++) {
+    const a0 = (i / segs) * Math.PI * 2;
+    const a1 = ((i + 1) / segs) * Math.PI * 2;
+    const y0 = Math.sin(a0) * ry - 60;
+    const z0 = ROOM_D * 0.5 + Math.cos(a0) * rz;
+    const y1 = Math.sin(a1) * ry - 60;
+    const z1 = ROOM_D * 0.5 + Math.cos(a1) * rz;
+    // Clamp to room
+    lines.push([[-hw * 0.6, y0, z0], [hw * 0.6, y0, z0]]);
+    if (i % 4 === 0) {
+      lines.push([[0, y0, z0], [0, y1, z1]]);
+    }
+  }
+  // A few vertical "bleacher" lines
+  for (let i = -3; i <= 3; i++) {
+    const x = i * (hw * 0.6 / 3);
+    for (let r = 0; r < 6; r++) {
+      const a  = (r / 6) * Math.PI;       // front half of oval
+      const a2 = ((r + 1) / 6) * Math.PI;
+      const y0 = Math.sin(a ) * ry - 60;
+      const z0 = ROOM_D * 0.5 + Math.cos(a ) * rz;
+      const y1 = Math.sin(a2) * ry - 60;
+      const z1 = ROOM_D * 0.5 + Math.cos(a2) * rz;
+      lines.push([[x, y0, z0], [x, y1, z1]]);
+    }
+  }
+  return lines;
+}
+
+// ─── Draw helpers ─────────────────────────────────────────────────
+function drawLine(p1, p2, ex, ey, ez, color, width) {
+  const a = project(p1[0], p1[1], p1[2], ex, ey, ez);
+  const b = project(p2[0], p2[1], p2[2], ex, ey, ez);
+  if (!a || !b) return;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = width || 1;
+  ctx.stroke();
+}
+
+function drawCrosshair(tx, ty, tz, size, ex, ey, ez) {
+  const c = project(tx, ty, tz, ex, ey, ez);
+  if (!c) return;
+
+  // Scale crosshair with distance
+  const sc   = Math.max(0.2, c.s);
+  const arms = size * sc;
+  const gap  = 6  * sc;
+  const tick = 4  * sc;
+
+  ctx.strokeStyle = '#0ff';
+  ctx.lineWidth   = 1.5;
+
+  // Outer circle
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, arms * 0.8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Cross arms with gap
+  ctx.beginPath();
+  // Left
+  ctx.moveTo(c.x - arms, c.y); ctx.lineTo(c.x - gap, c.y);
+  // Right
+  ctx.moveTo(c.x + gap,  c.y); ctx.lineTo(c.x + arms, c.y);
+  // Up
+  ctx.moveTo(c.x, c.y - arms); ctx.lineTo(c.x, c.y - gap);
+  // Down
+  ctx.moveTo(c.x, c.y + gap);  ctx.lineTo(c.x, c.y + arms);
+  ctx.stroke();
+
+  // Corner ticks on circle
+  for (let i = 0; i < 4; i++) {
+    const a  = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const r  = arms * 0.8;
+    const cx = c.x + Math.cos(a) * r;
+    const cy = c.y + Math.sin(a) * r;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * tick, cy + Math.sin(a) * tick);
+    ctx.stroke();
+  }
+
+  // Center dot
+  ctx.fillStyle = '#0ff';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 2 * sc, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ─── Main render ──────────────────────────────────────────────────
+function render(ex, ey, ez) {
+  const W = canvas.width, H = canvas.height;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Grid (floor + ceiling + walls) ──
+  if (showGrid) {
+    // Floor
+    ctx.globalAlpha = 0.55;
+    for (const [a, b] of floorGridLines(-hh, 1, ROOM_D, 12)) {
+      drawLine(a, b, ex, ey, ez, '#00ff41', 0.7);
+    }
+    // Ceiling
+    for (const [a, b] of floorGridLines(hh, 1, ROOM_D, 12)) {
+      drawLine(a, b, ex, ey, ez, '#00ff41', 0.7);
+    }
+    // Left wall
+    for (const [a, b] of sideGridLines(-hw, 1, ROOM_D, 8)) {
+      drawLine(a, b, ex, ey, ez, '#00ff41', 0.7);
+    }
+    // Right wall
+    for (const [a, b] of sideGridLines(hw, 1, ROOM_D, 8)) {
+      drawLine(a, b, ex, ey, ez, '#00ff41', 0.7);
+    }
+    ctx.globalAlpha = 1;
+
+    // Room outline edges — brighter
+    for (const [a, b] of ROOM_EDGES) {
+      const c = roomCorners();
+      drawLine(c[a], c[b], ex, ey, ez, '#00ff41', 1.5);
+    }
+  }
+
+  // ── Stadium ──
+  if (showStadium) {
+    ctx.globalAlpha = 0.5;
+    for (const [a, b] of stadiumLines()) {
+      drawLine(a, b, ex, ey, ez, '#ff8800', 0.8);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Targets ──
+  if (showTargets) {
+    for (const t of TARGETS) {
+      drawCrosshair(t.x, t.y, t.z, t.size, ex, ey, ez);
+    }
+  }
+
+  // ── Screen-edge frame (thin white border like his display bezel) ──
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(2, 2, W - 4, H - 4);
+
+  // ── Small info text bottom-right ──
+  ctx.fillStyle = 'rgba(0,255,65,0.5)';
+  ctx.font      = '11px Courier New';
+  ctx.textAlign = 'right';
+  ctx.fillText(`X:${ex.toFixed(0).padStart(5)}  Y:${ey.toFixed(0).padStart(5)}  Z:${ez.toFixed(0).padStart(5)}`, W - 12, H - 12);
+  ctx.textAlign = 'left';
+}
+
+// ─── Animation loop ───────────────────────────────────────────────
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function loop() {
+  animT += 0.016;
+
+  if (running) {
+    smoothX    = lerp(smoothX,    headX,    SMOOTH);
+    smoothY    = lerp(smoothY,    headY,    SMOOTH);
+    smoothDist = lerp(smoothDist, headDist, SMOOTH * 0.6);
+  } else {
+    // Demo sweep — just like the video auto-pans
+    smoothX    = Math.sin(animT * 0.45) * 220;
+    smoothY    = Math.sin(animT * 0.3)  *  80;
+    smoothDist = 480 + Math.sin(animT * 0.25) * 80;
+  }
+
+  // Eye is in front of the screen (negative Z — eye is at z < 0, room extends into +Z)
+  render(smoothX * exaggeration, smoothY * exaggeration, -smoothDist);
+
+  // Update IR dot HUD
+  const irDot = document.getElementById('irDot');
+  const irPanel = document.querySelector('.ir-panel');
+  const pw = irPanel.offsetWidth, ph = irPanel.offsetHeight;
+  irDot.style.left = ((smoothX / 500 + 0.5) * pw) + 'px';
+  irDot.style.top  = ((-smoothY / 350 + 0.5) * ph) + 'px';
+
+  requestAnimationFrame(loop);
+}
+
+// ─── Face detection ───────────────────────────────────────────────
+const vid        = document.getElementById('vid');
+const camOverlay = document.getElementById('camOverlay');
+const octx       = camOverlay.getContext('2d');
+const statusLine = document.getElementById('statusLine');
+const MODEL_URL  = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+
+async function startDetect() {
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+  const result  = await faceapi.detectSingleFace(vid, options).withFaceLandmarks(true);
+
+  if (result) {
+    const le = result.landmarks.getLeftEye();
+    const re = result.landmarks.getRightEye();
+    const lx = le.reduce((s, p) => s + p.x, 0) / le.length;
+    const rx = re.reduce((s, p) => s + p.x, 0) / re.length;
+    const ly = le.reduce((s, p) => s + p.y, 0) / le.length;
+    const ry = re.reduce((s, p) => s + p.y, 0) / re.length;
+
+    const eyeCX = (lx + rx) / 2;
+    const eyeCY = (ly + ry) / 2;
+    const span  = Math.abs(lx - rx);
+    const vw    = vid.videoWidth  || 640;
+    const vh    = vid.videoHeight || 480;
+
+    // Map to world coords:
+    // X: head left/right — webcam is mirrored so flip
+    // Y: head up/down
+    // Dist: eye span → distance (larger span = closer)
+    headX    = (eyeCX / vw - 0.5) * -600;
+    headY    = (eyeCY / vh - 0.5) * -350;
+    headDist = Math.max(150, Math.min(700, (72 / span) * 420));
+
+    // Draw face overlay on camera thumbnail
+    camOverlay.width  = vw;
+    camOverlay.height = vh;
+    octx.clearRect(0, 0, vw, vh);
+
+    // Draw eye dots
+    for (const e of [...le, ...re]) {
+      octx.beginPath();
+      octx.arc(e.x, e.y, 3, 0, Math.PI * 2);
+      octx.fillStyle = '#0f0';
+      octx.fill();
+    }
+
+    // Eye midpoint crosshair
+    octx.strokeStyle = '#0ff';
+    octx.lineWidth   = 1;
+    octx.beginPath();
+    octx.moveTo(eyeCX - 8, eyeCY); octx.lineTo(eyeCX + 8, eyeCY);
+    octx.moveTo(eyeCX, eyeCY - 8); octx.lineTo(eyeCX, eyeCY + 8);
+    octx.stroke();
+
+    statusLine.textContent = `TRACKING  span:${Math.round(span)}`;
+  } else {
+    statusLine.textContent = 'SEARCHING...';
+    if (camOverlay.width) octx.clearRect(0, 0, camOverlay.width, camOverlay.height);
+  }
+
+  setTimeout(() => requestAnimationFrame(startDetect), 30);
+}
+
+// ─── Boot sequence ────────────────────────────────────────────────
+const titleCard = document.getElementById('titleCard');
+const spinner   = document.getElementById('spinner');
+const loadMsg   = document.getElementById('loadMsg');
+const startBtn  = document.getElementById('startBtn');
+
+document.getElementById('depthSlider').addEventListener('input', e => {
+  ROOM_D = parseFloat(e.target.value);
+  document.getElementById('depthVal').textContent = Math.round(ROOM_D);
+});
+document.getElementById('exagSlider').addEventListener('input', e => {
+  exaggeration = parseFloat(e.target.value);
+  document.getElementById('exagVal').textContent = exaggeration.toFixed(1);
+});
+document.getElementById('toggleGrid').addEventListener('click', () => { showGrid = !showGrid; });
+document.getElementById('toggleTargets').addEventListener('click', () => { showTargets = !showTargets; });
+document.getElementById('toggleStadium').addEventListener('click', () => { showStadium = !showStadium; });
+
+(async () => {
+  // Load models
+  try {
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+    loadMsg.textContent = 'Models ready.';
+  } catch (e) {
+    loadMsg.textContent = 'Model load failed — check connection.';
+    return;
+  }
+
+  spinner.style.display = 'none';
+  startBtn.style.display = 'block';
+
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled    = true;
+    loadMsg.textContent  = 'Requesting camera...';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+      });
+      vid.srcObject = stream;
+      await new Promise(r => vid.onloadedmetadata = r);
+      vid.play();
+      running = true;
+      statusLine.textContent = 'SEARCHING...';
+      titleCard.classList.add('hidden');
+      startDetect();
+    } catch (e) {
+      loadMsg.textContent = 'Camera error: ' + e.message;
+      startBtn.disabled   = false;
+    }
+  });
+
+  // Start the render loop right away (demo mode)
+  loop();
+
+  // Hide title after 2s if user doesn't interact (show demo)
+  // Actually keep it up until they click — just dim it
+})();
+
+})();
+</script>
+</body>
+</html>
