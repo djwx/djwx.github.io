@@ -401,7 +401,14 @@
           <button data-int="600" id="int-fast">FAST</button>
         </div>
       </div>
+      <div class="field">
+        <label>TEST TONE</label>
+        <button id="test-tone" style="background:transparent;border:1px solid var(--amber-faint);color:var(--amber-dim);padding:5px 12px;font-family:inherit;font-size:10px;letter-spacing:0.16em;cursor:pointer;text-transform:uppercase;">▶ BEEP</button>
+      </div>
       <div class="status" id="beacon-status">READY</div>
+      <div class="hint" style="color:var(--red);opacity:0.85;margin-top:8px;">
+        ⚠ iPhone: turn OFF the silent/ringer switch on the side of the phone. Web audio is muted by silent mode with no warning.
+      </div>
     </div>
     <div class="ctrl-row">
       <button class="ctrl-btn" id="beacon-back">◀ BACK</button>
@@ -451,7 +458,7 @@
 
 // Bump this whenever you publish a new build — it shows in the header so you
 // can confirm GitHub Pages is serving the latest file rather than a cached one.
-const BUILD_VERSION = 'v7 · 2026-05-01 03:36 UTC';
+const BUILD_VERSION = 'v8 · 2026-05-01 03:46 UTC';
 
 // ---------- shared state ----------
 let ggwaveModule = null;
@@ -809,13 +816,42 @@ $('beacon-toggle').addEventListener('click', () => {
   if (beaconRunning) stopBeacon(); else startBeacon();
 });
 
+// Test-tone button — plays a plain 800 Hz sine for 0.4s using only OscillatorNode.
+// This bypasses ggwave entirely so we can isolate "audio out works at all".
+$('test-tone').addEventListener('click', async () => {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.value = 800;
+    osc.type = 'sine';
+    gain.gain.value = 0.0001;
+    gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.4);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.42);
+    dbg('beacon', 'testTone', 'played; ctx=' + audioCtx.state + ' rate=' + audioCtx.sampleRate);
+    $('beacon-status').textContent = 'TEST TONE PLAYED — did you hear a beep?';
+  } catch (e) {
+    dbg('beacon', 'testTone', 'ERR: ' + e.message);
+    $('beacon-status').textContent = 'TEST TONE FAIL: ' + e.message;
+    $('beacon-status').classList.add('error');
+  }
+});
+
 document.querySelectorAll('[data-band]').forEach(b => {
   b.addEventListener('click', () => {
     document.querySelectorAll('[data-band]').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     beaconBand = b.dataset.band;
+    const newProto = ggwaveModule ? pickProtocol(beaconBand) : '?';
+    dbg('beacon', 'band', beaconBand + ' → proto=' + newProto);
     if (beaconRunning) {
       $('beacon-status').textContent = `BROADCASTING ON ${beaconBand.toUpperCase()}`;
+      // Reset call counter so the next transmit re-logs everything
+      transmitOne._calls = 0;
     }
   });
 });
