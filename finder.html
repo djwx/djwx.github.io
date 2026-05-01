@@ -458,7 +458,7 @@
 
 // Bump this whenever you publish a new build — it shows in the header so you
 // can confirm GitHub Pages is serving the latest file rather than a cached one.
-const BUILD_VERSION = 'v11 · 2026-05-01 04:25 UTC';
+const BUILD_VERSION = 'v12 · 2026-05-01 04:42 UTC';
 
 // ---------- shared state ----------
 let ggwaveModule = null;
@@ -622,6 +622,14 @@ async function ensureGgwave() {
     dbg(panel, 'audibleProto', audibleProto + ' (' + typeof audibleProto + ')');
     dbg(panel, 'ultraProto', ultraProto + ' (' + typeof ultraProto + ')');
     dbg(panel, 'instance', initResult + ' (' + typeof initResult + ')');
+    // Function signatures — .length tells us how many args each fn expects
+    const fns = ['encode', 'decode', 'init', 'free', 'txToggleProtocol', 'rxToggleProtocol', 'getDefaultParameters'];
+    const sigInfo = fns.map(name => {
+      const f = ggwaveModule[name];
+      if (typeof f !== 'function') return name + '=(missing)';
+      return name + '(' + f.length + ')';
+    }).join(' ');
+    dbg(panel, 'fns', sigInfo);
   }
   console.log('[ggwave] loaded; sampleRate=', audioCtx.sampleRate, 'enums=', enumKeys, 'instance=', initResult);
 }
@@ -697,17 +705,40 @@ async function transmitOne() {
   // We need to enable the one we want and disable the others before each encode.
   // Default state: only AUDIBLE_FAST (=1) is enabled.
   if (typeof ggwaveModule.txToggleProtocol === 'function') {
+    if (callNum <= 2) {
+      // Probe the function: how many args does it expect?
+      dbg('beacon', 'tx.toggleArgs', 'fn.length=' + ggwaveModule.txToggleProtocol.length);
+    }
+    // Try BOTH calling conventions: (protoId, state) and (instance, protoId, state).
+    // If one throws, fall through to the other.
+    let toggleOk = false;
+    let lastErr = null;
+    // Convention A: (protoId, state) — module-level static
     try {
-      // Disable everything we know about, then enable the one we want.
-      // Signature appears to be (protocolId, enabled: 0|1)
       for (let i = 0; i <= 8; i++) {
         if (i === proto) continue;
         ggwaveModule.txToggleProtocol(i, 0);
       }
       ggwaveModule.txToggleProtocol(proto, 1);
-      if (callNum <= 2) dbg('beacon', 'tx.toggle', 'enabled proto=' + proto);
+      toggleOk = true;
+      if (callNum <= 2) dbg('beacon', 'tx.toggleA', 'OK proto=' + proto);
     } catch (e) {
-      dbg('beacon', 'tx.toggleErr', e.message);
+      lastErr = e;
+      if (callNum <= 2) dbg('beacon', 'tx.toggleA', 'FAIL: ' + e.message);
+    }
+    // Convention B: (instance, protoId, state) — per-instance
+    if (!toggleOk) {
+      try {
+        for (let i = 0; i <= 8; i++) {
+          if (i === proto) continue;
+          ggwaveModule.txToggleProtocol(ggwaveInstance, i, 0);
+        }
+        ggwaveModule.txToggleProtocol(ggwaveInstance, proto, 1);
+        toggleOk = true;
+        if (callNum <= 2) dbg('beacon', 'tx.toggleB', 'OK proto=' + proto);
+      } catch (e) {
+        if (callNum <= 2) dbg('beacon', 'tx.toggleB', 'FAIL: ' + e.message);
+      }
     }
   } else {
     if (callNum <= 2) dbg('beacon', 'tx.toggle', '(no txToggleProtocol fn)');
