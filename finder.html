@@ -469,8 +469,10 @@ function clearDebug(panel) {
 function setVer(t) { $('ver').textContent = t; }
 
 // Resolve the protocol enum across ggwave build variants.
-// Older builds: ggwave.TxProtocolId.GGWAVE_TX_PROTOCOL_AUDIBLE_FAST
-// Current build: ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST
+// Some builds expose Emscripten-wrapped enums where ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST
+// returns an object with a .value property; others expose plain numbers.
+// We always coerce to a number, and fall back to the documented integer constants
+// (0..5) if no match is found.
 function resolveProtocol(mod, kind /* 'audible' | 'ultra' */) {
   const candidates = [
     mod.ProtocolId, mod.TxProtocolId, mod.RxProtocolId
@@ -482,10 +484,22 @@ function resolveProtocol(mod, kind /* 'audible' | 'ultra' */) {
        'GGWAVE_PROTOCOL_AUDIBLE_NORMAL', 'GGWAVE_TX_PROTOCOL_AUDIBLE_NORMAL'];
   for (const enumObj of candidates) {
     for (const name of wantedNames) {
-      if (enumObj && typeof enumObj[name] !== 'undefined') return enumObj[name];
+      if (!enumObj || typeof enumObj[name] === 'undefined') continue;
+      const raw = enumObj[name];
+      // unwrap Emscripten enum-like objects: try .value, then numeric coercion
+      let n;
+      if (typeof raw === 'number') n = raw;
+      else if (raw && typeof raw.value === 'number') n = raw.value;
+      else if (raw && typeof raw.valueOf === 'function') {
+        const v = raw.valueOf();
+        if (typeof v === 'number' && Number.isFinite(v)) n = v;
+      }
+      if (typeof n === 'number' && Number.isFinite(n)) return n;
     }
   }
-  // last resort: 1 = audible_fast in every released build I've seen
+  // Documented integer values, stable across all ggwave releases:
+  // 0 audible_normal, 1 audible_fast, 2 audible_fastest,
+  // 3 ultrasound_normal, 4 ultrasound_fast, 5 ultrasound_fastest
   return (kind === 'ultra') ? 4 : 1;
 }
 
@@ -508,13 +522,24 @@ async function ensureGgwave() {
   const enumKeys = Object.keys(ggwaveModule).filter(k => /Protocol/i.test(k));
   const audibleProto = resolveProtocol(ggwaveModule, 'audible');
   const ultraProto = resolveProtocol(ggwaveModule, 'ultra');
+  // Probe the shape of ProtocolId — is it a flat enum or wrapped objects?
+  let pidShape = '?';
+  if (ggwaveModule.ProtocolId) {
+    const pidKeys = Object.keys(ggwaveModule.ProtocolId).slice(0, 3);
+    const samples = pidKeys.map(k => {
+      const v = ggwaveModule.ProtocolId[k];
+      return k + '=' + (typeof v === 'number' ? v : (typeof v) + (v && v.value !== undefined ? '(.value=' + v.value + ')' : ''));
+    });
+    pidShape = samples.join(' ');
+  }
   for (const panel of ['beacon', 'seeker']) {
     dbg(panel, 'load', 'OK');
     dbg(panel, 'sampleRate', audioCtx.sampleRate + ' Hz');
     dbg(panel, 'ctxState', audioCtx.state);
     dbg(panel, 'enumKeys', enumKeys.join(',') || '(none)');
-    dbg(panel, 'audibleProto', audibleProto);
-    dbg(panel, 'ultraProto', ultraProto);
+    dbg(panel, 'pidShape', pidShape);
+    dbg(panel, 'audibleProto', audibleProto + ' (' + typeof audibleProto + ')');
+    dbg(panel, 'ultraProto', ultraProto + ' (' + typeof ultraProto + ')');
   }
   console.log('[ggwave] loaded; sampleRate=', audioCtx.sampleRate, 'enums=', enumKeys);
 }
