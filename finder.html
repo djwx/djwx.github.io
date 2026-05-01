@@ -458,7 +458,7 @@
 
 // Bump this whenever you publish a new build — it shows in the header so you
 // can confirm GitHub Pages is serving the latest file rather than a cached one.
-const BUILD_VERSION = 'v10 · 2026-05-01 04:08 UTC';
+const BUILD_VERSION = 'v11 · 2026-05-01 04:25 UTC';
 
 // ---------- shared state ----------
 let ggwaveModule = null;
@@ -690,6 +690,27 @@ async function transmitOne() {
   if (audioCtx.state === 'suspended') {
     try { await audioCtx.resume(); } catch {}
     dbg('beacon', 'ctxResume', audioCtx.state);
+  }
+
+  // Modern ggwave doesn't honor the protocol arg passed to encode() — instead
+  // it uses whichever tx protocols are toggled on at the instance level.
+  // We need to enable the one we want and disable the others before each encode.
+  // Default state: only AUDIBLE_FAST (=1) is enabled.
+  if (typeof ggwaveModule.txToggleProtocol === 'function') {
+    try {
+      // Disable everything we know about, then enable the one we want.
+      // Signature appears to be (protocolId, enabled: 0|1)
+      for (let i = 0; i <= 8; i++) {
+        if (i === proto) continue;
+        ggwaveModule.txToggleProtocol(i, 0);
+      }
+      ggwaveModule.txToggleProtocol(proto, 1);
+      if (callNum <= 2) dbg('beacon', 'tx.toggle', 'enabled proto=' + proto);
+    } catch (e) {
+      dbg('beacon', 'tx.toggleErr', e.message);
+    }
+  } else {
+    if (callNum <= 2) dbg('beacon', 'tx.toggle', '(no txToggleProtocol fn)');
   }
 
   let waveform;
@@ -999,6 +1020,19 @@ async function startSeeker() {
     if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
       dbg('seeker', 'ctxResume', audioCtx.state);
+    }
+
+    // Enable all rx protocols so the seeker can decode both audible and
+    // ultrasonic transmissions regardless of how the beacon is configured.
+    if (typeof ggwaveModule.rxToggleProtocol === 'function') {
+      try {
+        for (let i = 0; i <= 8; i++) {
+          ggwaveModule.rxToggleProtocol(i, 1);
+        }
+        dbg('seeker', 'rx.toggle', 'enabled protocols 0-8');
+      } catch (e) {
+        dbg('seeker', 'rx.toggleErr', e.message);
+      }
     }
 
     // Mobile browsers often refuse to disable echoCancellation, so we ask but won't fail.
