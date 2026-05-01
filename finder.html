@@ -320,7 +320,7 @@
     font-size: 10px;
     line-height: 1.5;
     color: var(--amber-dim);
-    max-height: 140px;
+    max-height: 280px;
     overflow-y: auto;
     font-variant-numeric: tabular-nums;
     /* allow selection/copy inside the debug panel only */
@@ -458,7 +458,7 @@
 
 // Bump this whenever you publish a new build — it shows in the header so you
 // can confirm GitHub Pages is serving the latest file rather than a cached one.
-const BUILD_VERSION = 'v12 · 2026-05-01 04:42 UTC';
+const BUILD_VERSION = 'v13 · 2026-05-01 04:58 UTC';
 
 // ---------- shared state ----------
 let ggwaveModule = null;
@@ -475,7 +475,7 @@ function dbg(panel /* 'beacon' | 'seeker' */, key, value) {
   const idx = arr.findIndex(x => x.k === key);
   const entry = { k: key, v: value, t: Date.now() };
   if (idx >= 0) arr[idx] = entry; else arr.push(entry);
-  while (arr.length > 12) arr.shift();
+  while (arr.length > 30) arr.shift();
   const body = document.getElementById(panel + '-debug-body');
   if (!body) return;
   body.innerHTML = arr.map(e =>
@@ -745,15 +745,39 @@ async function transmitOne() {
   }
 
   let waveform;
+  // ggwave's emscripten binding may want the wrapped enum object rather than
+  // a raw integer. Look up the wrapped form for the current protocol and try
+  // it first; if that throws, fall back to the integer.
+  let protoArg = proto;
+  if (ggwaveModule.ProtocolId) {
+    const wantedName = (beaconBand === 'ultrasonic')
+      ? 'GGWAVE_PROTOCOL_ULTRASOUND_FAST'
+      : 'GGWAVE_PROTOCOL_AUDIBLE_FAST';
+    const wrapped = ggwaveModule.ProtocolId[wantedName];
+    if (wrapped !== undefined) {
+      protoArg = wrapped;
+      if (callNum <= 2) {
+        dbg('beacon', 'protoArg', wantedName + ' (wrapped, .value=' + (wrapped && wrapped.value) + ')');
+      }
+    } else {
+      if (callNum <= 2) dbg('beacon', 'protoArg', proto + ' (raw int, name not found)');
+    }
+  }
   try {
-    waveform = ggwaveModule.encode(ggwaveInstance, payload, proto, 25 /* volume 0-100 */);
+    waveform = ggwaveModule.encode(ggwaveInstance, payload, protoArg, 25 /* volume 0-100 */);
   } catch (e) {
-    $('beacon-status').textContent = 'ENCODE FAIL: ' + e.message;
-    $('beacon-status').classList.add('error');
-    dbg('beacon', 'encodeError', e.message);
-    console.error('[encode]', e, 'proto=', proto);
-    stopBeacon();
-    return;
+    // If passing the wrapped form failed, retry with the raw integer
+    if (callNum <= 2) dbg('beacon', 'encodeRetry', 'wrapped failed: ' + e.message + ' — trying int');
+    try {
+      waveform = ggwaveModule.encode(ggwaveInstance, payload, proto, 25);
+    } catch (e2) {
+      $('beacon-status').textContent = 'ENCODE FAIL: ' + e2.message;
+      $('beacon-status').classList.add('error');
+      dbg('beacon', 'encodeError', e2.message);
+      console.error('[encode]', e2, 'proto=', proto);
+      stopBeacon();
+      return;
+    }
   }
   if (!waveform) {
     $('beacon-status').textContent = 'ENCODE returned null/undefined';
