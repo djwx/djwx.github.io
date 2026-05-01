@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0805">
+<title>ACOUSTIC FINDER</title>
+<style>
+  :root {
+    --bg: #0a0805;
+    --bg-panel: #15110a;
+    --amber: #ffb000;
+    --amber-dim: #8a5e00;
+    --amber-faint: #3a2700;
+    --green: #4ade80;
+    --red: #ef4444;
+    --ink: #ffd680;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-user-select: none;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  body {
+    /* faint scanline texture */
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,176,0,0.025) 0px, rgba(255,176,0,0.025) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse at top, rgba(255,176,0,0.05), transparent 60%);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .frame {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 18px 18px 28px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--amber-faint);
+    padding-bottom: 10px; margin-bottom: 18px;
+    font-size: 11px; letter-spacing: 0.18em;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+  }
+  header .title {
+    color: var(--amber);
+    font-weight: 700;
+    letter-spacing: 0.32em;
+  }
+  header .ver { font-size: 10px; }
+
+  /* mode picker (start screen) */
+  .picker { display: flex; flex-direction: column; gap: 14px; flex: 1; justify-content: center; }
+  .picker h1 {
+    font-size: 13px; letter-spacing: 0.3em;
+    color: var(--amber-dim); text-transform: uppercase;
+    margin: 0 0 6px; font-weight: 500;
+  }
+  .picker p {
+    font-size: 12px; line-height: 1.6;
+    color: var(--ink); opacity: 0.7;
+    margin: 0 0 18px;
+  }
+  .mode-btn {
+    background: var(--bg-panel);
+    border: 1px solid var(--amber-faint);
+    color: var(--amber);
+    padding: 22px 18px;
+    text-align: left;
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .mode-btn:hover, .mode-btn:active {
+    border-color: var(--amber);
+    background: #1d160a;
+  }
+  .mode-btn .big {
+    font-size: 22px; font-weight: 700; letter-spacing: 0.24em;
+  }
+  .mode-btn .desc {
+    font-size: 11px; color: var(--ink); opacity: 0.6;
+    text-transform: none; letter-spacing: 0.04em;
+  }
+
+  /* shared panel */
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--amber-faint);
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .panel h2 {
+    margin: 0 0 10px;
+    font-size: 10px; letter-spacing: 0.3em;
+    color: var(--amber-dim); text-transform: uppercase;
+    font-weight: 500;
+    display: flex; justify-content: space-between;
+  }
+
+  /* beacon */
+  #beacon { display: none; flex: 1; flex-direction: column; }
+  .pulse {
+    text-align: center;
+    padding: 30px 0 20px;
+  }
+  .pulse-dot {
+    display: inline-block;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 0 0 var(--amber);
+    animation: pulse 1.6s ease-out infinite;
+  }
+  .pulse-dot.idle {
+    background: var(--amber-faint);
+    animation: none;
+    box-shadow: none;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255,176,0,0.7); transform: scale(1); }
+    70% { box-shadow: 0 0 0 28px rgba(255,176,0,0); transform: scale(1.05); }
+    100% { box-shadow: 0 0 0 0 rgba(255,176,0,0); transform: scale(1); }
+  }
+  .pulse-label {
+    margin-top: 16px;
+    font-size: 11px; letter-spacing: 0.3em;
+    color: var(--amber-dim); text-transform: uppercase;
+  }
+  .pulse-count {
+    font-size: 28px;
+    color: var(--amber);
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* seeker */
+  #seeker { display: none; flex: 1; flex-direction: column; }
+  .meter {
+    text-align: center;
+    padding: 8px 0 20px;
+  }
+  .meter-num {
+    font-size: 88px;
+    line-height: 1;
+    color: var(--amber);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 18px rgba(255,176,0,0.5);
+    letter-spacing: -0.02em;
+  }
+  .meter-num.cold { color: var(--amber-dim); text-shadow: none; }
+  .meter-unit {
+    font-size: 11px; letter-spacing: 0.3em;
+    color: var(--amber-dim); text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .bar-track {
+    height: 14px;
+    background: #0a0805;
+    border: 1px solid var(--amber-faint);
+    position: relative;
+    margin: 14px 0 6px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    width: 0%;
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+    transition: width 80ms linear;
+  }
+  .bar-ticks {
+    display: flex; justify-content: space-between;
+    font-size: 9px; color: var(--amber-faint);
+    letter-spacing: 0.2em;
+  }
+  .verdict {
+    text-align: center;
+    font-size: 14px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin: 14px 0 0;
+    min-height: 1.2em;
+    transition: color 0.2s;
+  }
+  .verdict.cold { color: var(--amber-dim); }
+  .verdict.hot { color: var(--green); animation: blink 0.6s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  .payload-log {
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 140px;
+    overflow-y: auto;
+    color: var(--ink);
+  }
+  .payload-log .row {
+    display: flex; gap: 10px;
+    padding: 4px 0;
+    border-bottom: 1px dotted var(--amber-faint);
+  }
+  .payload-log .row:last-child { border-bottom: none; }
+  .payload-log .ts { color: var(--amber-dim); flex-shrink: 0; }
+  .payload-log .msg { color: var(--amber); word-break: break-all; }
+  .payload-log .empty {
+    color: var(--amber-dim);
+    font-style: italic;
+    opacity: 0.6;
+    padding: 4px 0;
+  }
+
+  /* controls */
+  .ctrl-row {
+    display: flex; gap: 10px;
+    margin-top: auto;
+    padding-top: 14px;
+  }
+  .ctrl-btn {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--amber-faint);
+    color: var(--amber-dim);
+    padding: 12px 8px;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .ctrl-btn.primary {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .ctrl-btn:active { background: #1d160a; }
+
+  .field {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0;
+    font-size: 12px;
+  }
+  .field label { color: var(--amber-dim); letter-spacing: 0.16em; text-transform: uppercase; font-size: 10px; }
+  .field input[type=text] {
+    background: var(--bg);
+    border: 1px solid var(--amber-faint);
+    color: var(--amber);
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 12px;
+    width: 60%;
+    text-align: right;
+  }
+  .field input[type=text]:focus { outline: none; border-color: var(--amber); }
+  .field .toggle {
+    display: flex; gap: 0;
+  }
+  .field .toggle button {
+    background: transparent;
+    border: 1px solid var(--amber-faint);
+    color: var(--amber-dim);
+    padding: 5px 10px;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    cursor: pointer;
+  }
+  .field .toggle button.on {
+    background: var(--amber);
+    color: var(--bg);
+    border-color: var(--amber);
+  }
+  .field .toggle button:first-child { border-right-width: 0; }
+
+  .status {
+    font-size: 10px; color: var(--amber-dim);
+    letter-spacing: 0.2em; text-transform: uppercase;
+    margin-top: 8px;
+    min-height: 1.2em;
+  }
+  .status.error { color: var(--red); }
+
+  .hint {
+    font-size: 10px;
+    color: var(--amber-dim);
+    line-height: 1.7;
+    letter-spacing: 0.05em;
+    text-transform: none;
+    margin-top: 12px;
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+  <header>
+    <span class="title">◉ ACOUSTIC FINDER</span>
+    <span class="ver" id="ver">RDY</span>
+  </header>
+
+  <!-- MODE PICKER -->
+  <div id="picker" class="picker">
+    <h1>SELECT ROLE</h1>
+    <p>Open this page on two phones. One becomes the BEACON (broadcasts), the other becomes the SEEKER (homes in on the signal).</p>
+    <button class="mode-btn" data-mode="beacon">
+      <span class="big">▲ BEACON</span>
+      <span class="desc">Stay put. Broadcast a chirp every second so the other phone can find you.</span>
+    </button>
+    <button class="mode-btn" data-mode="seeker">
+      <span class="big">▼ SEEKER</span>
+      <span class="desc">Walk around. The number goes up as you get closer or point the mic toward the beacon.</span>
+    </button>
+    <div class="hint">
+      Requires microphone access (seeker) and speaker output (beacon). Works best within ~10m, line of sight. Reflections off walls degrade range and accuracy.
+    </div>
+  </div>
+
+  <!-- BEACON -->
+  <div id="beacon">
+    <div class="panel">
+      <h2><span>TRANSMIT STATUS</span><span id="beacon-state">IDLE</span></h2>
+      <div class="pulse">
+        <div class="pulse-dot idle" id="pulse-dot"></div>
+        <div class="pulse-label">CHIRPS SENT</div>
+        <div class="pulse-count" id="pulse-count">0</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <label>PAYLOAD</label>
+        <input type="text" id="beacon-payload" maxlength="16" value="HERE">
+      </div>
+      <div class="field">
+        <label>BAND</label>
+        <div class="toggle">
+          <button data-band="audible" class="on" id="band-audible">AUDIBLE</button>
+          <button data-band="ultrasonic" id="band-ultra">ULTRA</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>INTERVAL</label>
+        <div class="toggle">
+          <button data-int="1500" id="int-slow">SLOW</button>
+          <button data-int="1000" class="on" id="int-med">MED</button>
+          <button data-int="600" id="int-fast">FAST</button>
+        </div>
+      </div>
+      <div class="status" id="beacon-status">READY</div>
+    </div>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" id="beacon-back">◀ BACK</button>
+      <button class="ctrl-btn primary" id="beacon-toggle">START TX</button>
+    </div>
+  </div>
+
+  <!-- SEEKER -->
+  <div id="seeker">
+    <div class="panel">
+      <h2><span>SIGNAL</span><span id="seeker-state">IDLE</span></h2>
+      <div class="meter">
+        <div class="meter-num cold" id="meter-num">--</div>
+        <div class="meter-unit">RELATIVE STRENGTH</div>
+        <div class="bar-track"><div class="bar-fill" id="bar-fill"></div></div>
+        <div class="bar-ticks">
+          <span>FAR</span><span>•</span><span>•</span><span>•</span><span>HERE</span>
+        </div>
+        <div class="verdict cold" id="verdict">AWAITING SIGNAL</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2><span>DECODED PAYLOADS</span><span id="rx-count">0</span></h2>
+      <div class="payload-log" id="log">
+        <div class="empty">— no packets received yet —</div>
+      </div>
+    </div>
+    <div class="status" id="seeker-status">READY</div>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" id="seeker-back">◀ BACK</button>
+      <button class="ctrl-btn primary" id="seeker-toggle">START RX</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/ggwave@0.4.0/ggwave.js"></script>
+<script>
+'use strict';
+
+// ---------- shared state ----------
+let ggwaveModule = null;
+let ggwaveInstance = null;
+let audioCtx = null;
+
+const $ = (id) => document.getElementById(id);
+
+function setVer(t) { $('ver').textContent = t; }
+
+async function ensureGgwave() {
+  if (ggwaveModule && ggwaveInstance) return;
+  setVer('LOAD…');
+  // ggwave_factory is exposed by the unpkg build
+  ggwaveModule = await ggwave_factory();
+  const params = ggwaveModule.getDefaultParameters();
+  // sampleRate will be set per-context when we have one
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+  params.sampleRateInp = audioCtx.sampleRate;
+  params.sampleRateOut = audioCtx.sampleRate;
+  ggwaveInstance = ggwaveModule.init(params);
+  setVer('RDY');
+}
+
+// view switching
+function show(id) {
+  for (const v of ['picker', 'beacon', 'seeker']) {
+    $(v).style.display = (v === id) ? 'flex' : 'none';
+  }
+}
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    try {
+      await ensureGgwave();
+      show(btn.dataset.mode);
+    } catch (e) {
+      alert('Failed to load ggwave library: ' + e.message);
+    }
+  });
+});
+$('beacon-back').addEventListener('click', () => { stopBeacon(); show('picker'); });
+$('seeker-back').addEventListener('click', () => { stopSeeker(); show('picker'); });
+
+// ============================================================
+// BEACON — broadcasts ggwave packets at a fixed interval
+// ============================================================
+let beaconRunning = false;
+let beaconTimer = null;
+let beaconCount = 0;
+let beaconBand = 'audible';
+let beaconInterval = 1000;
+
+function pickProtocol(band) {
+  // For the bundled ggwave 0.4.0 build, TxProtocolId enum names:
+  // GGWAVE_TX_PROTOCOL_AUDIBLE_NORMAL / _FAST / _FASTEST
+  // GGWAVE_TX_PROTOCOL_ULTRASOUND_NORMAL / _FAST / _FASTEST
+  if (band === 'ultrasonic') {
+    return ggwaveModule.TxProtocolId.GGWAVE_TX_PROTOCOL_ULTRASOUND_FAST;
+  }
+  return ggwaveModule.TxProtocolId.GGWAVE_TX_PROTOCOL_AUDIBLE_FAST;
+}
+
+function convertTypedArray(src, type) {
+  const buf = new ArrayBuffer(src.byteLength);
+  new src.constructor(buf).set(src);
+  return new type(buf);
+}
+
+async function transmitOne() {
+  if (!ggwaveInstance) return;
+  const payload = ($('beacon-payload').value || 'HERE').slice(0, 16);
+  const proto = pickProtocol(beaconBand);
+  const waveform = ggwaveModule.encode(ggwaveInstance, payload, proto, 10 /* volume 0-100 */);
+  // ggwave returns Int8Array of float32 bytes; convert to Float32Array
+  const samples = convertTypedArray(new Uint8Array(waveform), Float32Array);
+  const buffer = audioCtx.createBuffer(1, samples.length, audioCtx.sampleRate);
+  buffer.getChannelData(0).set(samples);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(audioCtx.destination);
+  src.start();
+  beaconCount++;
+  $('pulse-count').textContent = beaconCount;
+  // pulse animation reset
+  const dot = $('pulse-dot');
+  dot.classList.remove('idle');
+  dot.style.animation = 'none';
+  // force reflow
+  // eslint-disable-next-line no-unused-expressions
+  dot.offsetHeight;
+  dot.style.animation = 'pulse 1.6s ease-out infinite';
+}
+
+async function startBeacon() {
+  try {
+    await ensureGgwave();
+    beaconRunning = true;
+    beaconCount = 0;
+    $('pulse-count').textContent = '0';
+    $('beacon-state').textContent = 'TX';
+    $('beacon-status').textContent = `BROADCASTING ON ${beaconBand.toUpperCase()}`;
+    $('beacon-toggle').textContent = 'STOP TX';
+    transmitOne();
+    beaconTimer = setInterval(transmitOne, beaconInterval);
+  } catch (e) {
+    $('beacon-status').textContent = 'ERR: ' + e.message;
+    $('beacon-status').classList.add('error');
+  }
+}
+
+function stopBeacon() {
+  beaconRunning = false;
+  if (beaconTimer) { clearInterval(beaconTimer); beaconTimer = null; }
+  $('beacon-state').textContent = 'IDLE';
+  $('beacon-status').textContent = 'STOPPED';
+  $('beacon-status').classList.remove('error');
+  $('beacon-toggle').textContent = 'START TX';
+  $('pulse-dot').classList.add('idle');
+}
+
+$('beacon-toggle').addEventListener('click', () => {
+  if (beaconRunning) stopBeacon(); else startBeacon();
+});
+
+document.querySelectorAll('[data-band]').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('[data-band]').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    beaconBand = b.dataset.band;
+    if (beaconRunning) {
+      $('beacon-status').textContent = `BROADCASTING ON ${beaconBand.toUpperCase()}`;
+    }
+  });
+});
+document.querySelectorAll('[data-int]').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('[data-int]').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    beaconInterval = parseInt(b.dataset.int, 10);
+    if (beaconRunning) {
+      clearInterval(beaconTimer);
+      beaconTimer = setInterval(transmitOne, beaconInterval);
+    }
+  });
+});
+
+// ============================================================
+// SEEKER — listens, decodes, and shows signal strength
+// ============================================================
+let seekerRunning = false;
+let micStream = null;
+let micNode = null;
+let analyser = null;
+let processorNode = null;
+let rxCount = 0;
+let smoothedStrength = 0;
+let lastDecodeAt = 0;
+
+// strength smoothing (slow attack, faster decay so it "drops" when you walk away)
+function pushStrength(raw) {
+  // raw: 0..1 ish
+  const attack = 0.35;
+  const decay = 0.08;
+  const a = (raw > smoothedStrength) ? attack : decay;
+  smoothedStrength = smoothedStrength + a * (raw - smoothedStrength);
+  return smoothedStrength;
+}
+
+function paintMeter(strength, fresh) {
+  // strength 0..1
+  const pct = Math.max(0, Math.min(1, strength));
+  $('bar-fill').style.width = (pct * 100).toFixed(1) + '%';
+  const num = Math.round(pct * 100);
+  const meterEl = $('meter-num');
+  meterEl.textContent = (rxCount === 0 && !fresh) ? '--' : num.toString().padStart(2, '0');
+  meterEl.classList.toggle('cold', pct < 0.15 && rxCount === 0);
+
+  const verdict = $('verdict');
+  verdict.classList.remove('cold', 'hot');
+  if (rxCount === 0) {
+    verdict.textContent = 'AWAITING SIGNAL';
+    verdict.classList.add('cold');
+  } else {
+    const sinceDecode = (performance.now() - lastDecodeAt) / 1000;
+    if (sinceDecode > 4) {
+      verdict.textContent = 'SIGNAL LOST';
+      verdict.classList.add('cold');
+    } else if (pct > 0.75) {
+      verdict.textContent = '◉ ON TARGET';
+      verdict.classList.add('hot');
+    } else if (pct > 0.5) {
+      verdict.textContent = 'HOT — CLOSER';
+    } else if (pct > 0.25) {
+      verdict.textContent = 'WARM';
+    } else {
+      verdict.textContent = 'COLD';
+      verdict.classList.add('cold');
+    }
+  }
+}
+
+function logPayload(text) {
+  const log = $('log');
+  if (rxCount === 0) log.innerHTML = '';
+  rxCount++;
+  $('rx-count').textContent = rxCount;
+  const row = document.createElement('div');
+  row.className = 'row';
+  const ts = new Date();
+  const tStr = ts.toTimeString().slice(0, 8);
+  row.innerHTML = `<span class="ts">${tStr}</span><span class="msg"></span>`;
+  row.querySelector('.msg').textContent = text;
+  log.insertBefore(row, log.firstChild);
+  // cap at 30 rows
+  while (log.children.length > 30) log.removeChild(log.lastChild);
+}
+
+async function startSeeker() {
+  try {
+    await ensureGgwave();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('mic API not available — needs HTTPS or localhost');
+    }
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+      video: false,
+    });
+    micNode = audioCtx.createMediaStreamSource(micStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.4;
+    micNode.connect(analyser);
+
+    // ScriptProcessor for decoding (deprecated but still works everywhere)
+    const bufSize = 1024;
+    processorNode = audioCtx.createScriptProcessor(bufSize, 1, 1);
+    micNode.connect(processorNode);
+    processorNode.connect(audioCtx.destination); // required to pump in some browsers; we won't actually output anything
+
+    const freqData = new Uint8Array(analyser.frequencyBinCount);
+    const sampleRate = audioCtx.sampleRate;
+
+    processorNode.onaudioprocess = (ev) => {
+      if (!seekerRunning) return;
+      const input = ev.inputBuffer.getChannelData(0);
+      // Decode attempt — ggwave wants Float32 samples
+      try {
+        const res = ggwaveModule.decode(
+          ggwaveInstance,
+          convertTypedArray(input, Int8Array)
+        );
+        if (res && res.length > 0) {
+          let txt;
+          try { txt = new TextDecoder('utf-8').decode(res); }
+          catch { txt = '<binary>'; }
+          if (txt && txt.length) {
+            logPayload(txt);
+            lastDecodeAt = performance.now();
+          }
+        }
+      } catch (e) {
+        // decode throws on malformed buffers occasionally — ignore
+      }
+    };
+
+    // strength meter loop — runs at ~30Hz, sampling ggwave's frequency band
+    const meterLoop = () => {
+      if (!seekerRunning) return;
+      analyser.getByteFrequencyData(freqData);
+      // ggwave audible band is roughly 1875Hz..6375Hz, ultrasonic is 15000Hz..19500Hz
+      // use whichever band has more energy so the seeker auto-adapts
+      const binHz = sampleRate / analyser.fftSize;
+      const audStart = Math.floor(1800 / binHz);
+      const audEnd   = Math.ceil(6500 / binHz);
+      const usStart  = Math.floor(14800 / binHz);
+      const usEnd    = Math.ceil(19800 / binHz);
+      let audSum = 0, audN = 0;
+      for (let i = audStart; i < audEnd && i < freqData.length; i++) { audSum += freqData[i]; audN++; }
+      let usSum = 0, usN = 0;
+      for (let i = usStart; i < usEnd && i < freqData.length; i++) { usSum += freqData[i]; usN++; }
+      const audAvg = audN ? audSum / audN : 0;
+      const usAvg  = usN  ? usSum  / usN  : 0;
+      const inBand = Math.max(audAvg, usAvg) / 255; // 0..1
+
+      // ambient noise floor — average over rest of spectrum
+      let restSum = 0, restN = 0;
+      for (let i = 4; i < audStart; i++) { restSum += freqData[i]; restN++; }
+      for (let i = audEnd; i < usStart && i < freqData.length; i++) { restSum += freqData[i]; restN++; }
+      const noise = restN ? (restSum / restN) / 255 : 0;
+
+      // signal-to-floor ratio, mapped to 0..1 with a gentle curve
+      const snr = Math.max(0, inBand - noise * 0.9);
+      const mapped = Math.min(1, Math.pow(snr * 2.6, 0.85));
+
+      const sm = pushStrength(mapped);
+      paintMeter(sm, true);
+
+      requestAnimationFrame(meterLoop);
+    };
+
+    seekerRunning = true;
+    rxCount = 0;
+    smoothedStrength = 0;
+    $('rx-count').textContent = '0';
+    $('seeker-state').textContent = 'RX';
+    $('seeker-status').textContent = 'LISTENING…';
+    $('seeker-status').classList.remove('error');
+    $('seeker-toggle').textContent = 'STOP RX';
+    $('log').innerHTML = '<div class="empty">— listening… —</div>';
+    requestAnimationFrame(meterLoop);
+  } catch (e) {
+    $('seeker-status').textContent = 'ERR: ' + e.message;
+    $('seeker-status').classList.add('error');
+  }
+}
+
+function stopSeeker() {
+  seekerRunning = false;
+  if (processorNode) { try { processorNode.disconnect(); } catch {} processorNode = null; }
+  if (analyser)      { try { analyser.disconnect(); } catch {} analyser = null; }
+  if (micNode)       { try { micNode.disconnect(); } catch {} micNode = null; }
+  if (micStream)     { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  $('seeker-state').textContent = 'IDLE';
+  $('seeker-status').textContent = 'STOPPED';
+  $('seeker-toggle').textContent = 'START RX';
+  $('meter-num').textContent = '--';
+  $('meter-num').classList.add('cold');
+  $('bar-fill').style.width = '0%';
+  $('verdict').textContent = 'AWAITING SIGNAL';
+  $('verdict').className = 'verdict cold';
+}
+
+$('seeker-toggle').addEventListener('click', () => {
+  if (seekerRunning) stopSeeker(); else startSeeker();
+});
+
+// keep screen awake if API available
+async function tryWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      await navigator.wakeLock.request('screen');
+    }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') tryWakeLock();
+});
+tryWakeLock();
+</script>
+</body>
+</html>
