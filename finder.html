@@ -458,7 +458,7 @@
 
 // Bump this whenever you publish a new build — it shows in the header so you
 // can confirm GitHub Pages is serving the latest file rather than a cached one.
-const BUILD_VERSION = 'v9 · 2026-05-01 03:55 UTC';
+const BUILD_VERSION = 'v10 · 2026-05-01 04:08 UTC';
 
 // ---------- shared state ----------
 let ggwaveModule = null;
@@ -774,6 +774,36 @@ async function transmitOne() {
       }
       dbg('beacon', 'sample.range', mn.toFixed(4) + ' .. ' + mx.toFixed(4));
       dbg('beacon', 'sample.absMax', absMax.toFixed(4));
+
+      // Find the spectral peak of the actual encoded waveform via DFT on a slice.
+      // We don't have a fast FFT handy, but we can scan a coarse band of frequencies
+      // and find which one has the most energy. This tells us what FREQUENCY this
+      // waveform is really at, regardless of what protocol number was passed.
+      // Sample a 4096-sample window from the middle of the chirp (skip the start
+      // markers, which are short bursts that bias the result).
+      const winSize = 4096;
+      const winStart = Math.min(Math.floor(samples.length / 2), samples.length - winSize - 1);
+      let peakFreq = 0, peakMag = 0;
+      // Scan from 500 Hz to 20000 Hz in 500 Hz steps
+      for (let f = 500; f <= 20000; f += 500) {
+        let re = 0, im = 0;
+        const w = 2 * Math.PI * f / audioCtx.sampleRate;
+        for (let i = 0; i < winSize; i++) {
+          const s = samples[winStart + i];
+          re += s * Math.cos(w * i);
+          im -= s * Math.sin(w * i);
+        }
+        const mag = Math.sqrt(re * re + im * im);
+        if (mag > peakMag) { peakMag = mag; peakFreq = f; }
+      }
+      dbg('beacon', 'peakFreq', peakFreq + ' Hz (mag ' + peakMag.toFixed(0) + ')');
+
+      // Also store a fingerprint of the first 8 samples — same protocol with
+      // same payload should produce identical samples, so we can compare proto 1
+      // vs proto 4 by switching bands and looking at this line.
+      const fp = [];
+      for (let i = 0; i < 8 && i < samples.length; i++) fp.push(samples[i].toFixed(4));
+      dbg('beacon', 'wf.fp', fp.join(' '));
     }
   }
 
