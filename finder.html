@@ -46,7 +46,7 @@
   header {
     display: flex; justify-content: space-between; align-items: baseline;
     border-bottom: 1px solid var(--amber-faint);
-    padding-bottom: 10px; margin-bottom: 18px;
+    padding-bottom: 10px; margin-bottom: 4px;
     font-size: 11px; letter-spacing: 0.18em;
     color: var(--amber-dim);
     text-transform: uppercase;
@@ -57,6 +57,15 @@
     letter-spacing: 0.32em;
   }
   header .ver { font-size: 10px; }
+  .build {
+    font-size: 9px;
+    color: var(--amber-faint);
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    text-align: right;
+    user-select: text;
+    -webkit-user-select: text;
+  }
 
   /* mode picker (start screen) */
   .picker { display: flex; flex-direction: column; gap: 14px; flex: 1; justify-content: center; }
@@ -343,6 +352,7 @@
     <span class="title">◉ ACOUSTIC FINDER</span>
     <span class="ver" id="ver">RDY</span>
   </header>
+  <div class="build" id="build">build —</div>
 
   <!-- MODE PICKER -->
   <div id="picker" class="picker">
@@ -439,6 +449,10 @@
 <script>
 'use strict';
 
+// Bump this whenever you publish a new build — it shows in the header so you
+// can confirm GitHub Pages is serving the latest file rather than a cached one.
+const BUILD_VERSION = 'v7 · 2026-05-01 03:36 UTC';
+
 // ---------- shared state ----------
 let ggwaveModule = null;
 let ggwaveInstance = null;
@@ -498,6 +512,13 @@ function copyDebug(panel) {
 
 function setVer(t) { $('ver').textContent = t; }
 
+// Show the build version immediately on script load so it's visible even before
+// ggwave has finished initializing.
+(function showBuild() {
+  const el = document.getElementById('build');
+  if (el) el.textContent = 'build ' + BUILD_VERSION;
+})();
+
 // Resolve the protocol enum across ggwave build variants.
 // Some builds expose Emscripten-wrapped enums where ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST
 // returns an object with a .value property; others expose plain numbers.
@@ -534,7 +555,7 @@ function resolveProtocol(mod, kind /* 'audible' | 'ultra' */) {
 }
 
 async function ensureGgwave() {
-  if (ggwaveModule && ggwaveInstance) return;
+  if (ggwaveModule && ggwaveInstance !== null && ggwaveInstance !== undefined) return;
   setVer('LOAD…');
   if (typeof ggwave_factory !== 'function') {
     throw new Error('ggwave_factory not found — script failed to load');
@@ -547,7 +568,8 @@ async function ensureGgwave() {
   const params = ggwaveModule.getDefaultParameters();
   params.sampleRateInp = audioCtx.sampleRate;
   params.sampleRateOut = audioCtx.sampleRate;
-  ggwaveInstance = ggwaveModule.init(params);
+  const initResult = ggwaveModule.init(params);
+  ggwaveInstance = initResult;
   setVer('RDY');
   const enumKeys = Object.keys(ggwaveModule).filter(k => /Protocol/i.test(k));
   const audibleProto = resolveProtocol(ggwaveModule, 'audible');
@@ -570,8 +592,9 @@ async function ensureGgwave() {
     dbg(panel, 'pidShape', pidShape);
     dbg(panel, 'audibleProto', audibleProto + ' (' + typeof audibleProto + ')');
     dbg(panel, 'ultraProto', ultraProto + ' (' + typeof ultraProto + ')');
+    dbg(panel, 'instance', initResult + ' (' + typeof initResult + ')');
   }
-  console.log('[ggwave] loaded; sampleRate=', audioCtx.sampleRate, 'enums=', enumKeys);
+  console.log('[ggwave] loaded; sampleRate=', audioCtx.sampleRate, 'enums=', enumKeys, 'instance=', initResult);
 }
 
 // view switching
@@ -623,8 +646,8 @@ async function transmitOne() {
   const callNum = (transmitOne._calls = (transmitOne._calls || 0) + 1);
   if (callNum <= 2) dbg('beacon', 'tx.entry', 'call #' + callNum);
 
-  if (!ggwaveInstance) {
-    dbg('beacon', 'tx.abort', 'no ggwaveInstance');
+  if (ggwaveInstance === null || ggwaveInstance === undefined) {
+    dbg('beacon', 'tx.abort', 'no ggwaveInstance (=' + ggwaveInstance + ')');
     return;
   }
   const payload = ($('beacon-payload').value || 'HERE').slice(0, 16);
