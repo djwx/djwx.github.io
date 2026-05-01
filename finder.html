@@ -314,6 +314,10 @@
     max-height: 140px;
     overflow-y: auto;
     font-variant-numeric: tabular-nums;
+    /* allow selection/copy inside the debug panel only */
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
   }
   .debug .dbg-title {
     color: var(--amber);
@@ -394,7 +398,7 @@
       <button class="ctrl-btn primary" id="beacon-toggle">START TX</button>
     </div>
     <div class="debug" id="beacon-debug">
-      <div class="dbg-title"><span>DEBUG</span><button onclick="clearDebug('beacon')">CLR</button></div>
+      <div class="dbg-title"><span>DEBUG</span><span><button onclick="copyDebug('beacon')">COPY</button> <button onclick="clearDebug('beacon')">CLR</button></span></div>
       <div id="beacon-debug-body"></div>
     </div>
   </div>
@@ -425,7 +429,7 @@
       <button class="ctrl-btn primary" id="seeker-toggle">START RX</button>
     </div>
     <div class="debug" id="seeker-debug">
-      <div class="dbg-title"><span>DEBUG</span><button onclick="clearDebug('seeker')">CLR</button></div>
+      <div class="dbg-title"><span>DEBUG</span><span><button onclick="copyDebug('seeker')">COPY</button> <button onclick="clearDebug('seeker')">CLR</button></span></div>
       <div id="seeker-debug-body"></div>
     </div>
   </div>
@@ -464,6 +468,32 @@ function clearDebug(panel) {
   dbgState[panel] = [];
   const body = document.getElementById(panel + '-debug-body');
   if (body) body.innerHTML = '';
+}
+function copyDebug(panel) {
+  const text = dbgState[panel].map(e => e.k + ': ' + e.v).join('\n');
+  // Prefer the modern API; fall back to a hidden textarea selection on older browsers
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch {}
+    document.body.removeChild(ta);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(fallback);
+  } else {
+    fallback();
+  }
+  // brief visual feedback
+  const btn = document.querySelector('#' + panel + '-debug button');
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = 'COPIED';
+    setTimeout(() => { btn.textContent = orig; }, 900);
+  }
 }
 
 function setVer(t) { $('ver').textContent = t; }
@@ -589,9 +619,20 @@ function convertTypedArray(src, type) {
 }
 
 async function transmitOne() {
-  if (!ggwaveInstance) return;
+  // Log entry IMMEDIATELY — before any check that might short-circuit
+  const callNum = (transmitOne._calls = (transmitOne._calls || 0) + 1);
+  if (callNum <= 2) dbg('beacon', 'tx.entry', 'call #' + callNum);
+
+  if (!ggwaveInstance) {
+    dbg('beacon', 'tx.abort', 'no ggwaveInstance');
+    return;
+  }
   const payload = ($('beacon-payload').value || 'HERE').slice(0, 16);
   const proto = pickProtocol(beaconBand);
+  if (callNum <= 2) {
+    dbg('beacon', 'tx.payload', payload);
+    dbg('beacon', 'tx.proto', proto + ' (' + typeof proto + ')');
+  }
 
   // resume context if suspended (mobile browsers love to do this)
   if (audioCtx.state === 'suspended') {
@@ -610,44 +651,86 @@ async function transmitOne() {
     stopBeacon();
     return;
   }
-  if (!waveform || waveform.length === 0) {
-    $('beacon-status').textContent = 'ENCODE EMPTY (proto=' + proto + ')';
+  if (!waveform) {
+    $('beacon-status').textContent = 'ENCODE returned null/undefined';
     $('beacon-status').classList.add('error');
-    dbg('beacon', 'encodeEmpty', 'proto=' + proto);
+    dbg('beacon', 'encodeNull', 'proto=' + proto);
     stopBeacon();
     return;
   }
 
-  // detect return type and convert appropriately
-  let samples;
-  const ctorName = waveform.constructor && waveform.constructor.name;
-  if (waveform instanceof Float32Array) {
-    samples = waveform;
-  } else if (waveform instanceof Int8Array || waveform instanceof Uint8Array) {
-    // bytes that decode as float32 samples (4 bytes per sample)
-    samples = new Float32Array(waveform.buffer, waveform.byteOffset, waveform.byteLength / 4);
-  } else if (waveform instanceof Int16Array) {
-    // some builds return Int16 PCM — convert to Float32 normalized
-    samples = new Float32Array(waveform.length);
-    for (let i = 0; i < waveform.length; i++) samples[i] = waveform[i] / 32768;
-  } else if (waveform.buffer) {
-    // generic ArrayBufferView — try byte-reinterpret to Float32
-    samples = new Float32Array(waveform.buffer, waveform.byteOffset || 0, (waveform.byteLength || waveform.length) / 4);
-  } else {
-    // last resort: assume array-like of floats
-    samples = Float32Array.from(waveform);
+  // Log what encode actually returned, BEFORE any length/conversion check
+  if (callNum <= 2) {
+    const ctorName = waveform.constructor && waveform.constructor.name;
+    dbg('beacon', 'wf.type', typeof waveform);
+    dbg('beacon', 'wf.ctor', ctorName || '(none)');
+    dbg('beacon', 'wf.length', waveform.length !== undefined ? waveform.length : '(undef)');
+    dbg('beacon', 'wf.byteLength', waveform.byteLength !== undefined ? waveform.byteLength : '(undef)');
+    dbg('beacon', 'wf.size()', (typeof waveform.size === 'function') ? waveform.size() : '(no .size)');
+    if (waveform.length === undefined && waveform.byteLength === undefined) {
+      const ks = [];
+      try { for (const k in waveform) { ks.push(k); if (ks.length >= 8) break; } } catch {}
+      dbg('beacon', 'wf.keys', ks.join(',') || '(no enumerable keys)');
+    }
   }
 
-  if (beaconCount === 0) {
-    dbg('beacon', 'wf.ctor', ctorName);
-    dbg('beacon', 'wf.length', waveform.length);
-    dbg('beacon', 'wf.byteLength', waveform.byteLength || '?');
+  // Detect return type and convert to a Float32Array.
+  let samples = null;
+  let conversionPath = '?';
+  if (waveform instanceof Float32Array) {
+    samples = waveform;
+    conversionPath = 'float32-direct';
+  } else if (waveform instanceof Int8Array || waveform instanceof Uint8Array) {
+    samples = new Float32Array(waveform.buffer, waveform.byteOffset, waveform.byteLength / 4);
+    conversionPath = 'bytes-as-float32';
+  } else if (waveform instanceof Int16Array) {
+    samples = new Float32Array(waveform.length);
+    for (let i = 0; i < waveform.length; i++) samples[i] = waveform[i] / 32768;
+    conversionPath = 'int16-pcm';
+  } else if (waveform.buffer && typeof waveform.byteLength === 'number') {
+    samples = new Float32Array(waveform.buffer, waveform.byteOffset || 0, waveform.byteLength / 4);
+    conversionPath = 'arraybufferview-float32';
+  } else if (typeof waveform.size === 'function') {
+    // Emscripten-wrapped vector
+    const n = waveform.size();
+    samples = new Float32Array(n);
+    for (let i = 0; i < n; i++) samples[i] = waveform.get ? waveform.get(i) : waveform[i];
+    conversionPath = 'emscripten-vector';
+  } else if (typeof waveform.length === 'number') {
+    samples = Float32Array.from(waveform);
+    conversionPath = 'array-like';
+  } else {
+    dbg('beacon', 'tx.abort', 'no conversion path matched');
+    $('beacon-status').textContent = 'ENCODE: unknown return type';
+    $('beacon-status').classList.add('error');
+    stopBeacon();
+    return;
+  }
+
+  if (callNum <= 2) {
+    dbg('beacon', 'wf.path', conversionPath);
     dbg('beacon', 'samples.len', samples.length);
-    // peek at sample range to confirm they're not all zero
-    let mn = Infinity, mx = -Infinity;
-    const N = Math.min(samples.length, 4096);
-    for (let i = 0; i < N; i++) { if (samples[i] < mn) mn = samples[i]; if (samples[i] > mx) mx = samples[i]; }
-    dbg('beacon', 'sample.range', mn.toFixed(4) + ' .. ' + mx.toFixed(4));
+    if (samples.length > 0) {
+      let mn = Infinity, mx = -Infinity, absMax = 0;
+      const N = Math.min(samples.length, 4096);
+      for (let i = 0; i < N; i++) {
+        const v = samples[i];
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+        const a = Math.abs(v);
+        if (a > absMax) absMax = a;
+      }
+      dbg('beacon', 'sample.range', mn.toFixed(4) + ' .. ' + mx.toFixed(4));
+      dbg('beacon', 'sample.absMax', absMax.toFixed(4));
+    }
+  }
+
+  if (samples.length === 0) {
+    $('beacon-status').textContent = 'ENCODE EMPTY (proto=' + proto + ')';
+    $('beacon-status').classList.add('error');
+    dbg('beacon', 'tx.abort', 'samples.length === 0');
+    stopBeacon();
+    return;
   }
 
   const buffer = audioCtx.createBuffer(1, samples.length, audioCtx.sampleRate);
