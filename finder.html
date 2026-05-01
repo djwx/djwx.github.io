@@ -458,7 +458,7 @@
 
 // Bump this whenever you publish a new build — it shows in the header so you
 // can confirm GitHub Pages is serving the latest file rather than a cached one.
-const BUILD_VERSION = 'v8 · 2026-05-01 03:46 UTC';
+const BUILD_VERSION = 'v9 · 2026-05-01 03:55 UTC';
 
 // ---------- shared state ----------
 let ggwaveModule = null;
@@ -591,12 +591,34 @@ async function ensureGgwave() {
     });
     pidShape = samples.join(' ');
   }
+  // Full enumeration of every protocol entry with its numeric value, so we can
+  // see what THIS build actually maps each protocol name to.
+  let pidFull = '?';
+  if (ggwaveModule.ProtocolId) {
+    const entries = [];
+    for (const k of Object.keys(ggwaveModule.ProtocolId)) {
+      if (k === 'values') continue; // skip the meta-entry
+      const v = ggwaveModule.ProtocolId[k];
+      let n;
+      if (typeof v === 'number') n = v;
+      else if (v && typeof v.value === 'number') n = v.value;
+      else if (v && typeof v.valueOf === 'function') {
+        const x = v.valueOf();
+        if (typeof x === 'number' && Number.isFinite(x)) n = x;
+      }
+      // Strip the GGWAVE_PROTOCOL_ prefix to keep the line short
+      const short = k.replace(/^GGWAVE_(TX_)?PROTOCOL_/, '');
+      entries.push(short + '=' + (n === undefined ? '?' : n));
+    }
+    pidFull = entries.join(', ');
+  }
   for (const panel of ['beacon', 'seeker']) {
     dbg(panel, 'load', 'OK');
     dbg(panel, 'sampleRate', audioCtx.sampleRate + ' Hz');
     dbg(panel, 'ctxState', audioCtx.state);
     dbg(panel, 'enumKeys', enumKeys.join(',') || '(none)');
     dbg(panel, 'pidShape', pidShape);
+    dbg(panel, 'pidFull', pidFull);
     dbg(panel, 'audibleProto', audibleProto + ' (' + typeof audibleProto + ')');
     dbg(panel, 'ultraProto', ultraProto + ' (' + typeof ultraProto + ')');
     dbg(panel, 'instance', initResult + ' (' + typeof initResult + ')');
