@@ -301,6 +301,36 @@
     margin-top: 12px;
     opacity: 0.7;
   }
+
+  /* debug panel — always visible, shows runtime values */
+  .debug {
+    margin-top: 12px;
+    border: 1px solid var(--amber-faint);
+    background: rgba(0,0,0,0.4);
+    padding: 8px 10px;
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--amber-dim);
+    max-height: 140px;
+    overflow-y: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .debug .dbg-title {
+    color: var(--amber);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 9px;
+    margin-bottom: 4px;
+    display: flex; justify-content: space-between;
+  }
+  .debug .dbg-row { word-break: break-all; }
+  .debug .dbg-row .k { color: var(--amber); }
+  .debug .dbg-row .v { color: var(--ink); }
+  .debug button {
+    background: transparent; border: 1px solid var(--amber-faint);
+    color: var(--amber-dim); font-family: inherit; font-size: 9px;
+    padding: 2px 6px; cursor: pointer; letter-spacing: 0.1em;
+  }
 </style>
 </head>
 <body>
@@ -363,6 +393,10 @@
       <button class="ctrl-btn" id="beacon-back">◀ BACK</button>
       <button class="ctrl-btn primary" id="beacon-toggle">START TX</button>
     </div>
+    <div class="debug" id="beacon-debug">
+      <div class="dbg-title"><span>DEBUG</span><button onclick="clearDebug('beacon')">CLR</button></div>
+      <div id="beacon-debug-body"></div>
+    </div>
   </div>
 
   <!-- SEEKER -->
@@ -390,6 +424,10 @@
       <button class="ctrl-btn" id="seeker-back">◀ BACK</button>
       <button class="ctrl-btn primary" id="seeker-toggle">START RX</button>
     </div>
+    <div class="debug" id="seeker-debug">
+      <div class="dbg-title"><span>DEBUG</span><button onclick="clearDebug('seeker')">CLR</button></div>
+      <div id="seeker-debug-body"></div>
+    </div>
   </div>
 </div>
 
@@ -403,6 +441,30 @@ let ggwaveInstance = null;
 let audioCtx = null;
 
 const $ = (id) => document.getElementById(id);
+
+// ---------- debug helpers ----------
+const dbgState = { beacon: [], seeker: [] };
+function dbg(panel /* 'beacon' | 'seeker' */, key, value) {
+  const arr = dbgState[panel];
+  // upsert by key; keep last 12 entries
+  const idx = arr.findIndex(x => x.k === key);
+  const entry = { k: key, v: value, t: Date.now() };
+  if (idx >= 0) arr[idx] = entry; else arr.push(entry);
+  while (arr.length > 12) arr.shift();
+  const body = document.getElementById(panel + '-debug-body');
+  if (!body) return;
+  body.innerHTML = arr.map(e =>
+    `<div class="dbg-row"><span class="k">${e.k}</span>: <span class="v">${escapeHtml(String(e.v))}</span></div>`
+  ).join('');
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function clearDebug(panel) {
+  dbgState[panel] = [];
+  const body = document.getElementById(panel + '-debug-body');
+  if (body) body.innerHTML = '';
+}
 
 function setVer(t) { $('ver').textContent = t; }
 
@@ -433,6 +495,8 @@ async function ensureGgwave() {
   if (typeof ggwave_factory !== 'function') {
     throw new Error('ggwave_factory not found — script failed to load');
   }
+  dbg('beacon', 'load', 'factory ok, awaiting wasm…');
+  dbg('seeker', 'load', 'factory ok, awaiting wasm…');
   ggwaveModule = await ggwave_factory();
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') await audioCtx.resume();
@@ -441,8 +505,18 @@ async function ensureGgwave() {
   params.sampleRateOut = audioCtx.sampleRate;
   ggwaveInstance = ggwaveModule.init(params);
   setVer('RDY');
-  console.log('[ggwave] loaded; sampleRate=', audioCtx.sampleRate,
-              'protocol enums:', Object.keys(ggwaveModule).filter(k => /Protocol/i.test(k)));
+  const enumKeys = Object.keys(ggwaveModule).filter(k => /Protocol/i.test(k));
+  const audibleProto = resolveProtocol(ggwaveModule, 'audible');
+  const ultraProto = resolveProtocol(ggwaveModule, 'ultra');
+  for (const panel of ['beacon', 'seeker']) {
+    dbg(panel, 'load', 'OK');
+    dbg(panel, 'sampleRate', audioCtx.sampleRate + ' Hz');
+    dbg(panel, 'ctxState', audioCtx.state);
+    dbg(panel, 'enumKeys', enumKeys.join(',') || '(none)');
+    dbg(panel, 'audibleProto', audibleProto);
+    dbg(panel, 'ultraProto', ultraProto);
+  }
+  console.log('[ggwave] loaded; sampleRate=', audioCtx.sampleRate, 'enums=', enumKeys);
 }
 
 // view switching
@@ -493,24 +567,64 @@ async function transmitOne() {
   if (!ggwaveInstance) return;
   const payload = ($('beacon-payload').value || 'HERE').slice(0, 16);
   const proto = pickProtocol(beaconBand);
+
+  // resume context if suspended (mobile browsers love to do this)
+  if (audioCtx.state === 'suspended') {
+    try { await audioCtx.resume(); } catch {}
+    dbg('beacon', 'ctxResume', audioCtx.state);
+  }
+
   let waveform;
   try {
     waveform = ggwaveModule.encode(ggwaveInstance, payload, proto, 25 /* volume 0-100 */);
   } catch (e) {
     $('beacon-status').textContent = 'ENCODE FAIL: ' + e.message;
     $('beacon-status').classList.add('error');
+    dbg('beacon', 'encodeError', e.message);
     console.error('[encode]', e, 'proto=', proto);
     stopBeacon();
     return;
   }
   if (!waveform || waveform.length === 0) {
-    $('beacon-status').textContent = 'ENCODE RETURNED EMPTY (proto=' + proto + ')';
+    $('beacon-status').textContent = 'ENCODE EMPTY (proto=' + proto + ')';
     $('beacon-status').classList.add('error');
+    dbg('beacon', 'encodeEmpty', 'proto=' + proto);
     stopBeacon();
     return;
   }
-  // ggwave returns the waveform as a typed array of bytes representing Float32 samples
-  const samples = convertTypedArray(new Uint8Array(waveform), Float32Array);
+
+  // detect return type and convert appropriately
+  let samples;
+  const ctorName = waveform.constructor && waveform.constructor.name;
+  if (waveform instanceof Float32Array) {
+    samples = waveform;
+  } else if (waveform instanceof Int8Array || waveform instanceof Uint8Array) {
+    // bytes that decode as float32 samples (4 bytes per sample)
+    samples = new Float32Array(waveform.buffer, waveform.byteOffset, waveform.byteLength / 4);
+  } else if (waveform instanceof Int16Array) {
+    // some builds return Int16 PCM — convert to Float32 normalized
+    samples = new Float32Array(waveform.length);
+    for (let i = 0; i < waveform.length; i++) samples[i] = waveform[i] / 32768;
+  } else if (waveform.buffer) {
+    // generic ArrayBufferView — try byte-reinterpret to Float32
+    samples = new Float32Array(waveform.buffer, waveform.byteOffset || 0, (waveform.byteLength || waveform.length) / 4);
+  } else {
+    // last resort: assume array-like of floats
+    samples = Float32Array.from(waveform);
+  }
+
+  if (beaconCount === 0) {
+    dbg('beacon', 'wf.ctor', ctorName);
+    dbg('beacon', 'wf.length', waveform.length);
+    dbg('beacon', 'wf.byteLength', waveform.byteLength || '?');
+    dbg('beacon', 'samples.len', samples.length);
+    // peek at sample range to confirm they're not all zero
+    let mn = Infinity, mx = -Infinity;
+    const N = Math.min(samples.length, 4096);
+    for (let i = 0; i < N; i++) { if (samples[i] < mn) mn = samples[i]; if (samples[i] > mx) mx = samples[i]; }
+    dbg('beacon', 'sample.range', mn.toFixed(4) + ' .. ' + mx.toFixed(4));
+  }
+
   const buffer = audioCtx.createBuffer(1, samples.length, audioCtx.sampleRate);
   buffer.getChannelData(0).set(samples);
   const src = audioCtx.createBufferSource();
@@ -521,6 +635,7 @@ async function transmitOne() {
   $('pulse-count').textContent = beaconCount;
   if (beaconCount === 1) {
     $('beacon-status').textContent = `TX OK — ${samples.length} samples @ ${audioCtx.sampleRate}Hz`;
+    dbg('beacon', 'tx', 'first chirp queued');
   }
   // pulse animation reset
   const dot = $('pulse-dot');
@@ -662,33 +777,79 @@ async function startSeeker() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error('mic API not available — needs HTTPS or localhost');
     }
-    micStream = await navigator.mediaDevices.getUserMedia({
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+      dbg('seeker', 'ctxResume', audioCtx.state);
+    }
+
+    // Mobile browsers often refuse to disable echoCancellation, so we ask but won't fail.
+    // Also try `channelCount: 1` and a higher sampleRate hint where supported.
+    const constraints = {
       audio: {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
+        channelCount: 1,
       },
       video: false,
-    });
+    };
+    micStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const track = micStream.getAudioTracks()[0];
+    const settings = track.getSettings ? track.getSettings() : {};
+    dbg('seeker', 'mic.label', track.label || '(unnamed)');
+    dbg('seeker', 'mic.sampleRate', settings.sampleRate || '?');
+    dbg('seeker', 'mic.channelCount', settings.channelCount || '?');
+    dbg('seeker', 'mic.echoCancel', settings.echoCancellation);
+    dbg('seeker', 'mic.noiseSup', settings.noiseSuppression);
+    dbg('seeker', 'mic.autoGain', settings.autoGainControl);
+
     micNode = audioCtx.createMediaStreamSource(micStream);
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0.4;
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.3;
     micNode.connect(analyser);
 
-    // ScriptProcessor for decoding (deprecated but still works everywhere)
-    const bufSize = 1024;
+    // ScriptProcessor for decoding. On iOS Safari, the script processor must be
+    // connected to the destination through a zero-gain node to keep the graph alive,
+    // otherwise onaudioprocess never fires. This is the well-known workaround.
+    const bufSize = 4096;
     processorNode = audioCtx.createScriptProcessor(bufSize, 1, 1);
     micNode.connect(processorNode);
-    processorNode.connect(audioCtx.destination); // required to pump in some browsers; we won't actually output anything
+    const muteGain = audioCtx.createGain();
+    muteGain.gain.value = 0;
+    processorNode.connect(muteGain);
+    muteGain.connect(audioCtx.destination);
 
     const freqData = new Uint8Array(analyser.frequencyBinCount);
+    const timeData = new Float32Array(analyser.fftSize);
     const sampleRate = audioCtx.sampleRate;
+
+    let processCalls = 0;
+    let lastProcessLog = 0;
 
     processorNode.onaudioprocess = (ev) => {
       if (!seekerRunning) return;
+      processCalls++;
       const input = ev.inputBuffer.getChannelData(0);
-      // Decode attempt — ggwave wants Float32 samples
+
+      // periodic debug — confirm onaudioprocess is firing AND has non-zero data
+      const now = performance.now();
+      if (now - lastProcessLog > 500) {
+        lastProcessLog = now;
+        let mn = Infinity, mx = -Infinity, absMax = 0;
+        for (let i = 0; i < input.length; i++) {
+          const v = input[i];
+          if (v < mn) mn = v;
+          if (v > mx) mx = v;
+          const a = Math.abs(v);
+          if (a > absMax) absMax = a;
+        }
+        dbg('seeker', 'proc.calls', processCalls);
+        dbg('seeker', 'proc.range', mn.toFixed(4) + ' .. ' + mx.toFixed(4));
+        dbg('seeker', 'proc.absMax', absMax.toFixed(4));
+      }
+
+      // Decode attempt — ggwave wants Float32 samples reinterpreted as Int8 bytes
       try {
         const res = ggwaveModule.decode(
           ggwaveInstance,
@@ -701,6 +862,7 @@ async function startSeeker() {
           if (txt && txt.length) {
             logPayload(txt);
             lastDecodeAt = performance.now();
+            dbg('seeker', 'lastDecode', txt);
           }
         }
       } catch (e) {
@@ -709,11 +871,23 @@ async function startSeeker() {
     };
 
     // strength meter loop — runs at ~30Hz, sampling ggwave's frequency band
+    let meterTicks = 0;
     const meterLoop = () => {
       if (!seekerRunning) return;
+      meterTicks++;
       analyser.getByteFrequencyData(freqData);
-      // ggwave audible band is roughly 1875Hz..6375Hz, ultrasonic is 15000Hz..19500Hz
-      // use whichever band has more energy so the seeker auto-adapts
+
+      // periodic debug — verify analyser is producing data
+      if (meterTicks % 30 === 0) {
+        let fdMax = 0, fdSum = 0;
+        for (let i = 0; i < freqData.length; i++) {
+          if (freqData[i] > fdMax) fdMax = freqData[i];
+          fdSum += freqData[i];
+        }
+        dbg('seeker', 'fft.max', fdMax);
+        dbg('seeker', 'fft.avg', (fdSum / freqData.length).toFixed(1));
+      }
+
       const binHz = sampleRate / analyser.fftSize;
       const audStart = Math.floor(1800 / binHz);
       const audEnd   = Math.ceil(6500 / binHz);
@@ -725,15 +899,13 @@ async function startSeeker() {
       for (let i = usStart; i < usEnd && i < freqData.length; i++) { usSum += freqData[i]; usN++; }
       const audAvg = audN ? audSum / audN : 0;
       const usAvg  = usN  ? usSum  / usN  : 0;
-      const inBand = Math.max(audAvg, usAvg) / 255; // 0..1
+      const inBand = Math.max(audAvg, usAvg) / 255;
 
-      // ambient noise floor — average over rest of spectrum
       let restSum = 0, restN = 0;
       for (let i = 4; i < audStart; i++) { restSum += freqData[i]; restN++; }
       for (let i = audEnd; i < usStart && i < freqData.length; i++) { restSum += freqData[i]; restN++; }
       const noise = restN ? (restSum / restN) / 255 : 0;
 
-      // signal-to-floor ratio, mapped to 0..1 with a gentle curve
       const snr = Math.max(0, inBand - noise * 0.9);
       const mapped = Math.min(1, Math.pow(snr * 2.6, 0.85));
 
@@ -752,10 +924,13 @@ async function startSeeker() {
     $('seeker-status').classList.remove('error');
     $('seeker-toggle').textContent = 'STOP RX';
     $('log').innerHTML = '<div class="empty">— listening… —</div>';
+    dbg('seeker', 'started', new Date().toTimeString().slice(0,8));
     requestAnimationFrame(meterLoop);
   } catch (e) {
     $('seeker-status').textContent = 'ERR: ' + e.message;
     $('seeker-status').classList.add('error');
+    dbg('seeker', 'startError', e.name + ': ' + e.message);
+    console.error('[seeker] start failed', e);
   }
 }
 
