@@ -393,7 +393,7 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/ggwave@0.4.0/ggwave.js"></script>
+<script src="https://unpkg.com/ggwave/ggwave.js"></script>
 <script>
 'use strict';
 
@@ -406,19 +406,43 @@ const $ = (id) => document.getElementById(id);
 
 function setVer(t) { $('ver').textContent = t; }
 
+// Resolve the protocol enum across ggwave build variants.
+// Older builds: ggwave.TxProtocolId.GGWAVE_TX_PROTOCOL_AUDIBLE_FAST
+// Current build: ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST
+function resolveProtocol(mod, kind /* 'audible' | 'ultra' */) {
+  const candidates = [
+    mod.ProtocolId, mod.TxProtocolId, mod.RxProtocolId
+  ].filter(Boolean);
+  const wantedNames = (kind === 'ultra')
+    ? ['GGWAVE_PROTOCOL_ULTRASOUND_FAST', 'GGWAVE_TX_PROTOCOL_ULTRASOUND_FAST',
+       'GGWAVE_PROTOCOL_ULTRASOUND_NORMAL', 'GGWAVE_TX_PROTOCOL_ULTRASOUND_NORMAL']
+    : ['GGWAVE_PROTOCOL_AUDIBLE_FAST', 'GGWAVE_TX_PROTOCOL_AUDIBLE_FAST',
+       'GGWAVE_PROTOCOL_AUDIBLE_NORMAL', 'GGWAVE_TX_PROTOCOL_AUDIBLE_NORMAL'];
+  for (const enumObj of candidates) {
+    for (const name of wantedNames) {
+      if (enumObj && typeof enumObj[name] !== 'undefined') return enumObj[name];
+    }
+  }
+  // last resort: 1 = audible_fast in every released build I've seen
+  return (kind === 'ultra') ? 4 : 1;
+}
+
 async function ensureGgwave() {
   if (ggwaveModule && ggwaveInstance) return;
   setVer('LOAD…');
-  // ggwave_factory is exposed by the unpkg build
+  if (typeof ggwave_factory !== 'function') {
+    throw new Error('ggwave_factory not found — script failed to load');
+  }
   ggwaveModule = await ggwave_factory();
-  const params = ggwaveModule.getDefaultParameters();
-  // sampleRate will be set per-context when we have one
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') await audioCtx.resume();
+  const params = ggwaveModule.getDefaultParameters();
   params.sampleRateInp = audioCtx.sampleRate;
   params.sampleRateOut = audioCtx.sampleRate;
   ggwaveInstance = ggwaveModule.init(params);
   setVer('RDY');
+  console.log('[ggwave] loaded; sampleRate=', audioCtx.sampleRate,
+              'protocol enums:', Object.keys(ggwaveModule).filter(k => /Protocol/i.test(k)));
 }
 
 // view switching
@@ -429,11 +453,17 @@ function show(id) {
 }
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
+    show(btn.dataset.mode);
+    const statusId = (btn.dataset.mode === 'beacon') ? 'beacon-status' : 'seeker-status';
+    $(statusId).textContent = 'LOADING WASM…';
+    $(statusId).classList.remove('error');
     try {
       await ensureGgwave();
-      show(btn.dataset.mode);
+      $(statusId).textContent = 'READY';
     } catch (e) {
-      alert('Failed to load ggwave library: ' + e.message);
+      $(statusId).textContent = 'LOAD FAIL: ' + e.message;
+      $(statusId).classList.add('error');
+      console.error('[ggwave] load failed', e);
     }
   });
 });
@@ -450,13 +480,7 @@ let beaconBand = 'audible';
 let beaconInterval = 1000;
 
 function pickProtocol(band) {
-  // For the bundled ggwave 0.4.0 build, TxProtocolId enum names:
-  // GGWAVE_TX_PROTOCOL_AUDIBLE_NORMAL / _FAST / _FASTEST
-  // GGWAVE_TX_PROTOCOL_ULTRASOUND_NORMAL / _FAST / _FASTEST
-  if (band === 'ultrasonic') {
-    return ggwaveModule.TxProtocolId.GGWAVE_TX_PROTOCOL_ULTRASOUND_FAST;
-  }
-  return ggwaveModule.TxProtocolId.GGWAVE_TX_PROTOCOL_AUDIBLE_FAST;
+  return resolveProtocol(ggwaveModule, band === 'ultrasonic' ? 'ultra' : 'audible');
 }
 
 function convertTypedArray(src, type) {
@@ -469,8 +493,23 @@ async function transmitOne() {
   if (!ggwaveInstance) return;
   const payload = ($('beacon-payload').value || 'HERE').slice(0, 16);
   const proto = pickProtocol(beaconBand);
-  const waveform = ggwaveModule.encode(ggwaveInstance, payload, proto, 10 /* volume 0-100 */);
-  // ggwave returns Int8Array of float32 bytes; convert to Float32Array
+  let waveform;
+  try {
+    waveform = ggwaveModule.encode(ggwaveInstance, payload, proto, 25 /* volume 0-100 */);
+  } catch (e) {
+    $('beacon-status').textContent = 'ENCODE FAIL: ' + e.message;
+    $('beacon-status').classList.add('error');
+    console.error('[encode]', e, 'proto=', proto);
+    stopBeacon();
+    return;
+  }
+  if (!waveform || waveform.length === 0) {
+    $('beacon-status').textContent = 'ENCODE RETURNED EMPTY (proto=' + proto + ')';
+    $('beacon-status').classList.add('error');
+    stopBeacon();
+    return;
+  }
+  // ggwave returns the waveform as a typed array of bytes representing Float32 samples
   const samples = convertTypedArray(new Uint8Array(waveform), Float32Array);
   const buffer = audioCtx.createBuffer(1, samples.length, audioCtx.sampleRate);
   buffer.getChannelData(0).set(samples);
@@ -480,6 +519,9 @@ async function transmitOne() {
   src.start();
   beaconCount++;
   $('pulse-count').textContent = beaconCount;
+  if (beaconCount === 1) {
+    $('beacon-status').textContent = `TX OK — ${samples.length} samples @ ${audioCtx.sampleRate}Hz`;
+  }
   // pulse animation reset
   const dot = $('pulse-dot');
   dot.classList.remove('idle');
@@ -650,7 +692,7 @@ async function startSeeker() {
       try {
         const res = ggwaveModule.decode(
           ggwaveInstance,
-          convertTypedArray(input, Int8Array)
+          convertTypedArray(new Float32Array(input), Int8Array)
         );
         if (res && res.length > 0) {
           let txt;
