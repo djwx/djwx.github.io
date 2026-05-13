@@ -1,845 +1,1087 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>LaneGuard</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>LaneGuard</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap");
 
-  :root {
-    --green: #00ff88;
-    --red: #ff3355;
-    --yellow: #ffcc00;
-    --blue: #00aaff;
-    --dark: #000d0a;
-    --panel: rgba(0, 20, 14, 0.85);
-    --border: rgba(0, 255, 136, 0.25);
-  }
+      :root {
+        --green: #00ff88;
+        --red: #ff3355;
+        --yellow: #ffcc00;
+        --blue: #00aaff;
+        --dark: #000d0a;
+        --panel: rgba(0, 20, 14, 0.85);
+        --border: rgba(0, 255, 136, 0.25);
+      }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-  body {
-    background: var(--dark);
-    color: var(--green);
-    font-family: 'Share Tech Mono', monospace;
-    height: 100dvh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
+      body {
+        background: var(--dark);
+        color: var(--green);
+        font-family: "Share Tech Mono", monospace;
+        height: 100dvh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
 
-  #splash {
-    position: fixed; inset: 0; z-index: 100;
-    background: var(--dark);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 2rem;
-    padding: 2rem;
-  }
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: var(--dark);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2rem;
+        padding: 2rem;
+      }
 
-  .logo {
-    font-family: 'Orbitron', monospace;
-    font-size: clamp(2rem, 8vw, 3.5rem);
-    font-weight: 900;
-    letter-spacing: 0.15em;
-    color: var(--green);
-    text-shadow: 0 0 30px rgba(0,255,136,0.6), 0 0 60px rgba(0,255,136,0.3);
-    animation: pulse 2s ease-in-out infinite;
-  }
+      .logo {
+        font-family: "Orbitron", monospace;
+        font-size: clamp(2rem, 8vw, 3.5rem);
+        font-weight: 900;
+        letter-spacing: 0.15em;
+        color: var(--green);
+        text-shadow:
+          0 0 30px rgba(0, 255, 136, 0.6),
+          0 0 60px rgba(0, 255, 136, 0.3);
+        animation: pulse 2s ease-in-out infinite;
+      }
 
-  @keyframes pulse {
-    0%, 100% { text-shadow: 0 0 30px rgba(0,255,136,0.6), 0 0 60px rgba(0,255,136,0.3); }
-    50% { text-shadow: 0 0 50px rgba(0,255,136,0.9), 0 0 100px rgba(0,255,136,0.5); }
-  }
+      @keyframes pulse {
+        0%,
+        100% {
+          text-shadow:
+            0 0 30px rgba(0, 255, 136, 0.6),
+            0 0 60px rgba(0, 255, 136, 0.3);
+        }
+        50% {
+          text-shadow:
+            0 0 50px rgba(0, 255, 136, 0.9),
+            0 0 100px rgba(0, 255, 136, 0.5);
+        }
+      }
 
-  .tagline {
-    font-size: 0.85rem;
-    letter-spacing: 0.3em;
-    color: rgba(0,255,136,0.5);
-    text-transform: uppercase;
-  }
+      .tagline {
+        font-size: 0.85rem;
+        letter-spacing: 0.3em;
+        color: rgba(0, 255, 136, 0.5);
+        text-transform: uppercase;
+      }
 
-  .warning-box {
-    border: 1px solid var(--yellow);
-    background: rgba(255,204,0,0.07);
-    padding: 1rem 1.5rem;
-    max-width: 400px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    color: var(--yellow);
-    line-height: 1.7;
-    letter-spacing: 0.05em;
-  }
+      .warning-box {
+        border: 1px solid var(--yellow);
+        background: rgba(255, 204, 0, 0.07);
+        padding: 1rem 1.5rem;
+        max-width: 400px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        color: var(--yellow);
+        line-height: 1.7;
+        letter-spacing: 0.05em;
+      }
 
-  .warning-box strong {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: 0.85rem;
-    letter-spacing: 0.2em;
-  }
+      .warning-box strong {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.85rem;
+        letter-spacing: 0.2em;
+      }
 
-  .start-btn {
-    font-family: 'Orbitron', monospace;
-    font-size: 1rem;
-    font-weight: 700;
-    letter-spacing: 0.2em;
-    color: var(--dark);
-    background: var(--green);
-    border: none;
-    padding: 1rem 3rem;
-    cursor: pointer;
-    border-radius: 2px;
-    transition: all 0.2s;
-    text-transform: uppercase;
-  }
+      .start-btn {
+        font-family: "Orbitron", monospace;
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        color: var(--dark);
+        background: var(--green);
+        border: none;
+        padding: 1rem 3rem;
+        cursor: pointer;
+        border-radius: 2px;
+        transition: all 0.2s;
+        text-transform: uppercase;
+      }
 
-  .start-btn:hover {
-    background: #33ffaa;
-    box-shadow: 0 0 30px rgba(0,255,136,0.5);
-    transform: scale(1.03);
-  }
+      .start-btn:hover {
+        background: #33ffaa;
+        box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+        transform: scale(1.03);
+      }
 
-  /* ── Main HUD ── */
-  #hud {
-    position: relative;
-    width: 100%;
-    height: 100dvh;
-    display: none;
-  }
+      /* ── Main HUD ── */
+      #hud {
+        position: relative;
+        width: 100%;
+        height: 100dvh;
+        display: none;
+      }
 
-  #video {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
-    transform: scaleX(1);
-  }
+      #video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform: scaleX(1);
+      }
 
-  #overlay {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-  }
+      #overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
 
-  /* corner brackets */
-  .corner {
-    position: absolute;
-    width: 28px; height: 28px;
-    border-color: var(--green);
-    border-style: solid;
-    opacity: 0.7;
-  }
-  .corner.tl { top: 12px; left: 12px; border-width: 2px 0 0 2px; }
-  .corner.tr { top: 12px; right: 12px; border-width: 2px 2px 0 0; }
-  .corner.bl { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
-  .corner.br { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
+      /* corner brackets */
+      .corner {
+        position: absolute;
+        width: 28px;
+        height: 28px;
+        border-color: var(--green);
+        border-style: solid;
+        opacity: 0.7;
+      }
+      .corner.tl {
+        top: 12px;
+        left: 12px;
+        border-width: 2px 0 0 2px;
+      }
+      .corner.tr {
+        top: 12px;
+        right: 12px;
+        border-width: 2px 2px 0 0;
+      }
+      .corner.bl {
+        bottom: 12px;
+        left: 12px;
+        border-width: 0 0 2px 2px;
+      }
+      .corner.br {
+        bottom: 12px;
+        right: 12px;
+        border-width: 0 2px 2px 0;
+      }
 
-  /* Status panel */
-  #status-panel {
-    position: absolute;
-    top: 16px; left: 50%; transform: translateX(-50%);
-    font-family: 'Orbitron', monospace;
-    font-size: clamp(0.65rem, 2.5vw, 0.85rem);
-    letter-spacing: 0.15em;
-    font-weight: 700;
-    padding: 6px 20px;
-    border-radius: 2px;
-    border: 1px solid currentColor;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
+      /* Status panel */
+      #status-panel {
+        position: absolute;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-family: "Orbitron", monospace;
+        font-size: clamp(0.65rem, 2.5vw, 0.85rem);
+        letter-spacing: 0.15em;
+        font-weight: 700;
+        padding: 6px 20px;
+        border-radius: 2px;
+        border: 1px solid currentColor;
+        transition: all 0.2s;
+        white-space: nowrap;
+      }
 
-  #status-panel.ok     { color: var(--green); background: rgba(0,255,136,0.1); border-color: rgba(0,255,136,0.4); }
-  #status-panel.warn   { color: var(--yellow); background: rgba(255,204,0,0.1); border-color: rgba(255,204,0,0.5); }
-  #status-panel.danger { color: var(--red);   background: rgba(255,51,85,0.15); border-color: rgba(255,51,85,0.6); animation: blink 0.3s step-start infinite; }
-  #status-panel.searching { color: rgba(0,255,136,0.5); background: transparent; border-color: rgba(0,255,136,0.2); }
+      #status-panel.ok {
+        color: var(--green);
+        background: rgba(0, 255, 136, 0.1);
+        border-color: rgba(0, 255, 136, 0.4);
+      }
+      #status-panel.warn {
+        color: var(--yellow);
+        background: rgba(255, 204, 0, 0.1);
+        border-color: rgba(255, 204, 0, 0.5);
+      }
+      #status-panel.danger {
+        color: var(--red);
+        background: rgba(255, 51, 85, 0.15);
+        border-color: rgba(255, 51, 85, 0.6);
+        animation: blink 0.3s step-start infinite;
+      }
+      #status-panel.searching {
+        color: rgba(0, 255, 136, 0.5);
+        background: transparent;
+        border-color: rgba(0, 255, 136, 0.2);
+      }
 
-  @keyframes blink { 50% { opacity: 0.4; } }
+      @keyframes blink {
+        50% {
+          opacity: 0.4;
+        }
+      }
 
-  /* Drift indicator */
-  #drift-bar-wrap {
-    position: absolute;
-    bottom: 70px; left: 50%; transform: translateX(-50%);
-    width: min(300px, 80vw);
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-  }
+      /* Drift indicator */
+      #drift-bar-wrap {
+        position: absolute;
+        bottom: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(300px, 80vw);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
 
-  #drift-label {
-    font-size: 0.6rem;
-    letter-spacing: 0.3em;
-    color: rgba(0,255,136,0.5);
-  }
+      #drift-label {
+        font-size: 0.6rem;
+        letter-spacing: 0.3em;
+        color: rgba(0, 255, 136, 0.5);
+      }
 
-  #drift-track {
-    width: 100%; height: 6px;
-    background: rgba(0,255,136,0.1);
-    border: 1px solid rgba(0,255,136,0.2);
-    border-radius: 3px;
-    position: relative;
-    overflow: visible;
-  }
+      #drift-track {
+        width: 100%;
+        height: 6px;
+        background: rgba(0, 255, 136, 0.1);
+        border: 1px solid rgba(0, 255, 136, 0.2);
+        border-radius: 3px;
+        position: relative;
+        overflow: visible;
+      }
 
-  #drift-center {
-    position: absolute;
-    left: 50%; top: 50%;
-    transform: translate(-50%, -50%);
-    width: 2px; height: 12px;
-    background: rgba(0,255,136,0.4);
-  }
+      #drift-center {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 2px;
+        height: 12px;
+        background: rgba(0, 255, 136, 0.4);
+      }
 
-  #drift-needle {
-    position: absolute;
-    top: 50%; transform: translateY(-50%);
-    width: 14px; height: 14px;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 8px var(--green);
-    transition: left 0.15s ease, background 0.2s;
-    left: 50%;
-    margin-left: -7px;
-  }
+      #drift-needle {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 8px var(--green);
+        transition:
+          left 0.15s ease,
+          background 0.2s;
+        left: 50%;
+        margin-left: -7px;
+      }
 
-  #drift-needle.warn   { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
-  #drift-needle.danger { background: var(--red);    box-shadow: 0 0 12px var(--red); }
+      #drift-needle.warn {
+        background: var(--yellow);
+        box-shadow: 0 0 8px var(--yellow);
+      }
+      #drift-needle.danger {
+        background: var(--red);
+        box-shadow: 0 0 12px var(--red);
+      }
 
-  /* Stats row */
-  #stats {
-    position: absolute;
-    bottom: 16px; left: 16px; right: 16px;
-    display: flex; justify-content: space-between;
-    font-size: 0.65rem;
-    color: rgba(0,255,136,0.45);
-    letter-spacing: 0.1em;
-  }
+      /* Stats row */
+      #stats {
+        position: absolute;
+        bottom: 16px;
+        left: 16px;
+        right: 16px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.65rem;
+        color: rgba(0, 255, 136, 0.45);
+        letter-spacing: 0.1em;
+      }
 
-  /* Danger flash overlay */
-  #danger-flash {
-    position: absolute; inset: 0;
-    background: rgba(255,51,85,0.12);
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.1s;
-  }
+      /* Danger flash overlay */
+      #danger-flash {
+        position: absolute;
+        inset: 0;
+        background: rgba(255, 51, 85, 0.12);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.1s;
+      }
 
-  #danger-flash.active { opacity: 1; }
+      #danger-flash.active {
+        opacity: 1;
+      }
 
-  /* ROI outline (debug visual) */
-  .roi-guide {
-    position: absolute;
-    bottom: 28%; left: 10%; right: 10%;
-    height: 38%;
-    border: 1px dashed rgba(0,255,136,0.12);
-    pointer-events: none;
-  }
-</style>
-</head>
-<body>
+      /* ROI outline (debug visual) */
+      .roi-guide {
+        position: absolute;
+        bottom: 28%;
+        left: 10%;
+        right: 10%;
+        height: 38%;
+        border: 1px dashed rgba(0, 255, 136, 0.12);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ── Splash ── -->
+    <div id="splash">
+      <div class="logo">LANEGUARD</div>
+      <div class="tagline">Intelligent Lane Departure Warning</div>
 
-<!-- ── Splash ── -->
-<div id="splash">
-  <div class="logo">LANEGUARD</div>
-  <div class="tagline">Intelligent Lane Departure Warning</div>
+      <div class="warning-box">
+        <strong>⚠ Safety Notice</strong>
+        This is an experimental driving aid only. Never rely on it as your
+        primary source of lane awareness. Always keep your eyes on the road.
+        Mount your phone securely on the dashboard before driving.
+      </div>
 
-  <div class="warning-box">
-    <strong>⚠ Safety Notice</strong>
-    This is an experimental driving aid only. Never rely on it as your primary source of lane awareness. Always keep your eyes on the road. Mount your phone securely on the dashboard before driving.
-  </div>
-
-  <button class="start-btn" onclick="startApp()">Activate System</button>
-</div>
-
-<!-- ── HUD ── -->
-<div id="hud">
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="overlay"></canvas>
-
-  <div class="corner tl"></div>
-  <div class="corner tr"></div>
-  <div class="corner bl"></div>
-  <div class="corner br"></div>
-
-  <div id="status-panel" class="searching">SCANNING FOR LANES…</div>
-
-  <div class="roi-guide"></div>
-
-  <div id="drift-bar-wrap">
-    <div id="drift-label">LATERAL POSITION</div>
-    <div id="drift-track">
-      <div id="drift-center"></div>
-      <div id="drift-needle"></div>
+      <button class="start-btn" onclick="startApp()">Activate System</button>
+      <div
+        style="
+          font-size: 0.6rem;
+          color: rgba(0, 255, 136, 0.3);
+          letter-spacing: 0.2em;
+          margin-top: -0.5rem;
+        "
+      >
+        Press D or double-tap to toggle edge debug overlay
+      </div>
     </div>
-  </div>
 
-  <div id="stats">
-    <span id="stat-fps">FPS: --</span>
-    <span id="stat-conf">CONF: --</span>
-    <span id="stat-lines">LINES: --</span>
-  </div>
+    <!-- ── HUD ── -->
+    <div id="hud">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
 
-  <div id="danger-flash"></div>
-</div>
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
 
-<script>
-// ══════════════════════════════════════════════
-//  LANEGUARD — Browser Lane Detection
-//  Uses Canny-style edge detection + Hough-line
-//  accumulation, runs entirely on-device.
-// ══════════════════════════════════════════════
+      <div id="status-panel" class="searching">SCANNING FOR LANES…</div>
 
-const video   = document.getElementById('video');
-const canvas  = document.getElementById('overlay');
-const ctx     = canvas.getContext('2d');
-const statusEl = document.getElementById('status-panel');
-const needle   = document.getElementById('drift-needle');
-const flash    = document.getElementById('danger-flash');
-const statFps  = document.getElementById('stat-fps');
-const statConf = document.getElementById('stat-conf');
-const statLines= document.getElementById('stat-lines');
+      <div class="roi-guide"></div>
 
-// Off-screen processing canvas
-const proc    = document.createElement('canvas');
-const pctx    = proc.getContext('2d', { willReadFrequently: true });
+      <div id="drift-bar-wrap">
+        <div id="drift-label">LATERAL POSITION</div>
+        <div id="drift-track">
+          <div id="drift-center"></div>
+          <div id="drift-needle"></div>
+        </div>
+      </div>
 
-let running   = false;
-let lastTime  = 0;
-let frameCount= 0;
-let fps       = 0;
+      <div id="stats">
+        <span id="stat-fps">FPS: --</span>
+        <span id="stat-conf">CONF: --</span>
+        <span id="stat-lines">LINES: --</span>
+      </div>
 
-// State
-let leftLane  = null;   // { x1,y1,x2,y2 }
-let rightLane = null;
-let driftPct  = 0;      // -1 (far left) to +1 (far right)
-let laneConf  = 0;      // 0-1
-let vibrating = false;
-let lastVibe  = 0;
+      <div id="danger-flash"></div>
+    </div>
 
-// ── Config ─────────────────────────────────────
-const CFG = {
-  procW: 320,        // processing resolution width
-  procH: 240,
-  cannyLo: 40,       // edge low threshold
-  cannyHi: 100,      // edge high threshold
-  roiTopFrac: 0.42,  // ROI top (fraction of height from bottom)
-  roiBottomFrac: 0.02,
-  houghThreshold: 28,
-  houghRho: 1,
-  minLineLen: 30,
-  slopeFilter: [0.35, 2.8],  // min/max |slope| for lane lines
-  smoothing: 0.25,   // EMA factor for line smoothing
-  driftThreshold: 0.28,
-  driftDanger: 0.45,
-};
+    <script>
+      // ══════════════════════════════════════════════
+      //  LANEGUARD v2 — Robust Lane Detection
+      //  Pipeline: greyscale → contrast norm → blur
+      //           → Canny edges → trapezoid ROI
+      //           → Standard Hough accumulator
+      //           → Peak extraction → slope classify
+      //           → Weighted line fit → EMA smooth
+      // ══════════════════════════════════════════════
 
-// Smoothed lane endpoints
-let smoothL = null, smoothR = null;
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("overlay");
+      const ctx = canvas.getContext("2d");
+      const statusEl = document.getElementById("status-panel");
+      const needle = document.getElementById("drift-needle");
+      const flash = document.getElementById("danger-flash");
+      const statFps = document.getElementById("stat-fps");
+      const statConf = document.getElementById("stat-conf");
+      const statLines = document.getElementById("stat-lines");
 
-// ── Entry ───────────────────────────────────────
-async function startApp() {
-  document.getElementById('splash').style.display = 'none';
-  document.getElementById('hud').style.display = 'block';
+      // Off-screen processing canvas
+      const proc = document.createElement("canvas");
+      const pctx = proc.getContext("2d", { willReadFrequently: true });
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-      audio: false,
-    });
-    video.srcObject = stream;
-    video.addEventListener('loadedmetadata', () => {
-      resizeCanvases();
-      running = true;
-      requestAnimationFrame(loop);
-    });
-  } catch (e) {
-    statusEl.textContent = 'CAMERA ACCESS DENIED';
-    statusEl.className = 'danger';
-    console.error(e);
-  }
+      // Debug edge canvas (toggled with D key / double-tap)
+      const dbgCanvas = document.createElement("canvas");
+      dbgCanvas.style.cssText =
+        "position:absolute;top:0;left:0;width:100%;height:100%;opacity:0.55;pointer-events:none;display:none;image-rendering:pixelated";
+      document.getElementById("hud").appendChild(dbgCanvas);
+      const dbgCtx = dbgCanvas.getContext("2d");
+      let debugMode = false;
 
-  window.addEventListener('resize', resizeCanvases);
-}
+      let running = false;
+      let lastTime = 0;
+      let frameCount = 0;
+      let fps = 0;
 
-function resizeCanvases() {
-  canvas.width  = video.videoWidth  || window.innerWidth;
-  canvas.height = video.videoHeight || window.innerHeight;
-  canvas.style.width  = '100%';
-  canvas.style.height = '100%';
-  proc.width  = CFG.procW;
-  proc.height = CFG.procH;
-}
+      let leftLane = null;
+      let rightLane = null;
+      let driftPct = 0;
+      let laneConf = 0;
+      let lastVibe = 0;
+      let smoothL = null,
+        smoothR = null;
+      let missFrames = 0; // frames without any detection
 
-// ── Main Loop ───────────────────────────────────
-function loop(ts) {
-  if (!running) return;
-  requestAnimationFrame(loop);
+      // ── Config ─────────────────────────────────────
+      const CFG = {
+        procW: 480, // wider for better Hough resolution
+        procH: 270,
 
-  // FPS throttle to ~30
-  if (ts - lastTime < 33) return;
-  const dt = ts - lastTime;
-  lastTime = ts;
-  frameCount++;
-  if (frameCount % 20 === 0) fps = Math.round(1000 / dt);
+        // Contrast normalisation (stretch histogram inside ROI)
+        normLo: 0.05, // percentile to clip to black
+        normHi: 0.95, // percentile to clip to white
 
-  if (video.readyState < 2) return;
+        // Canny
+        cannyLo: 20,
+        cannyHi: 60,
 
-  // 1. Grab frame into small proc canvas
-  pctx.drawImage(video, 0, 0, CFG.procW, CFG.procH);
-  const imgData = pctx.getImageData(0, 0, CFG.procW, CFG.procH);
+        // ROI trapezoid (fractions of procH / procW)
+        roiTop: 0.38, // where the trapezoid apex starts (from top)
+        roiBot: 0.97, // bottom edge
+        roiTopW: 0.12, // half-width at top (fraction of procW)
+        roiBotW: 0.48, // half-width at bottom
 
-  // 2. Greyscale + gaussian blur
-  const grey = toGreyscale(imgData.data, CFG.procW, CFG.procH);
-  const blurred = gaussianBlur(grey, CFG.procW, CFG.procH);
+        // Standard Hough
+        houghTheta: 1, // degrees per bin
+        houghRho: 1, // pixels per bin
+        houghPeak: 55, // accumulator threshold to count as a line
+        numPeaks: 16, // max peaks to extract per frame
+        peakSuppress: 8, // suppression radius (rho bins) around each peak
 
-  // 3. Canny edge detection
-  const edges = canny(blurred, CFG.procW, CFG.procH, CFG.cannyLo, CFG.cannyHi);
+        // Lane line filter (degrees from horizontal for |angle|)
+        angleLo: 18, // reject lines shallower than this
+        angleHi: 78, // reject lines steeper than this
 
-  // 4. Region of interest mask (trapezoid)
-  const roiEdges = applyROI(edges, CFG.procW, CFG.procH);
+        smoothing: 0.2, // EMA alpha — higher = snappier
+        missDecay: 0.85, // how fast lane fades when not detected
+        missThreshold: 25, // frames before we drop the lane entirely
 
-  // 5. Probabilistic Hough lines
-  const lines = houghLines(roiEdges, CFG.procW, CFG.procH);
+        driftThreshold: 0.28,
+        driftDanger: 0.45,
+      };
 
-  // 6. Classify left / right
-  const { left, right } = classifyLines(lines, CFG.procW, CFG.procH);
-
-  // 7. Average + smooth
-  updateLanes(left, right, CFG.procW, CFG.procH);
-
-  // 8. Compute drift
-  computeDrift(CFG.procW, CFG.procH);
-
-  // 9. Draw on display canvas
-  render();
-
-  // 10. Alerts
-  handleAlerts();
-
-  // Stats
-  statFps.textContent  = `FPS: ${fps}`;
-  statConf.textContent = `CONF: ${Math.round(laneConf * 100)}%`;
-  statLines.textContent= `LINES: ${lines.length}`;
-}
-
-// ── Image Processing ─────────────────────────────
-
-function toGreyscale(data, w, h) {
-  const g = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    const p = i * 4;
-    g[i] = 0.299 * data[p] + 0.587 * data[p+1] + 0.114 * data[p+2];
-  }
-  return g;
-}
-
-function gaussianBlur(src, w, h) {
-  // 5×5 gaussian kernel
-  const k = [2,4,5,4,2, 4,9,12,9,4, 5,12,15,12,5, 4,9,12,9,4, 2,4,5,4,2];
-  const ksum = 159;
-  const dst = new Float32Array(w * h);
-  for (let y = 2; y < h - 2; y++) {
-    for (let x = 2; x < w - 2; x++) {
-      let v = 0;
-      let ki = 0;
-      for (let ky = -2; ky <= 2; ky++) {
-        for (let kx = -2; kx <= 2; kx++) {
-          v += src[(y + ky) * w + (x + kx)] * k[ki++];
-        }
+      // Pre-compute Hough sin/cos tables
+      const THETA_BINS = Math.round(180 / CFG.houghTheta);
+      const sinT = new Float32Array(THETA_BINS);
+      const cosT = new Float32Array(THETA_BINS);
+      for (let t = 0; t < THETA_BINS; t++) {
+        const rad = (t * CFG.houghTheta * Math.PI) / 180;
+        sinT[t] = Math.sin(rad);
+        cosT[t] = Math.cos(rad);
       }
-      dst[y * w + x] = v / ksum;
-    }
-  }
-  return dst;
-}
+      const DIAG = Math.ceil(Math.hypot(CFG.procW, CFG.procH));
+      const RHO_BINS = Math.ceil((2 * DIAG) / CFG.houghRho) + 1;
+      const RHO_OFF = Math.ceil(DIAG / CFG.houghRho);
+      const accum = new Int32Array(THETA_BINS * RHO_BINS); // reused each frame
 
-function canny(grey, w, h, lo, hi) {
-  // Sobel gradients
-  const gx = new Float32Array(w * h);
-  const gy = new Float32Array(w * h);
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const i = y * w + x;
-      gx[i] = -grey[i-w-1] + grey[i-w+1] - 2*grey[i-1] + 2*grey[i+1] - grey[i+w-1] + grey[i+w+1];
-      gy[i] = -grey[i-w-1] - 2*grey[i-w] - grey[i-w+1] + grey[i+w-1] + 2*grey[i+w] + grey[i+w+1];
-    }
-  }
-  const mag = new Float32Array(w * h);
-  const ang = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    mag[i] = Math.hypot(gx[i], gy[i]);
-    ang[i] = Math.atan2(gy[i], gx[i]);
-  }
+      // ── Entry ───────────────────────────────────────
+      async function startApp() {
+        document.getElementById("splash").style.display = "none";
+        document.getElementById("hud").style.display = "block";
 
-  // Non-maximum suppression
-  const nms = new Float32Array(w * h);
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const i  = y * w + x;
-      const a  = ((ang[i] * 180 / Math.PI) + 180) % 180;
-      let q = 255, r = 255;
-      if      (a < 22.5 || a >= 157.5)  { q = mag[i-1];   r = mag[i+1]; }
-      else if (a < 67.5)                 { q = mag[i-w+1]; r = mag[i+w-1]; }
-      else if (a < 112.5)                { q = mag[i-w];   r = mag[i+w]; }
-      else                               { q = mag[i-w-1]; r = mag[i+w+1]; }
-      nms[i] = (mag[i] >= q && mag[i] >= r) ? mag[i] : 0;
-    }
-  }
+        // Debug toggle
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "d" || e.key === "D") toggleDebug();
+        });
+        let taps = 0;
+        document.addEventListener("touchstart", () => {
+          taps++;
+          setTimeout(() => {
+            if (taps >= 2) toggleDebug();
+            taps = 0;
+          }, 300);
+        });
 
-  // Double threshold + hysteresis
-  const edges = new Uint8Array(w * h);
-  const STRONG = 255, WEAK = 50;
-  for (let i = 0; i < w * h; i++) {
-    if      (nms[i] >= hi) edges[i] = STRONG;
-    else if (nms[i] >= lo) edges[i] = WEAK;
-  }
-  // Simple hysteresis
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const i = y * w + x;
-      if (edges[i] === WEAK) {
-        if (edges[i-1]===STRONG || edges[i+1]===STRONG ||
-            edges[i-w]===STRONG || edges[i+w]===STRONG ||
-            edges[i-w-1]===STRONG || edges[i-w+1]===STRONG ||
-            edges[i+w-1]===STRONG || edges[i+w+1]===STRONG) {
-          edges[i] = STRONG;
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
+          });
+          video.srcObject = stream;
+          video.addEventListener("loadedmetadata", () => {
+            resizeCanvases();
+            running = true;
+            requestAnimationFrame(loop);
+          });
+        } catch (e) {
+          statusEl.textContent = "CAMERA ACCESS DENIED";
+          statusEl.className = "danger";
+          console.error(e);
+        }
+        window.addEventListener("resize", resizeCanvases);
+      }
+
+      function toggleDebug() {
+        debugMode = !debugMode;
+        dbgCanvas.style.display = debugMode ? "block" : "none";
+      }
+
+      function resizeCanvases() {
+        canvas.width = video.videoWidth || window.innerWidth;
+        canvas.height = video.videoHeight || window.innerHeight;
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        proc.width = CFG.procW;
+        proc.height = CFG.procH;
+        dbgCanvas.width = CFG.procW;
+        dbgCanvas.height = CFG.procH;
+      }
+
+      // ── Main Loop ───────────────────────────────────
+      function loop(ts) {
+        if (!running) return;
+        requestAnimationFrame(loop);
+        if (ts - lastTime < 40) return; // ~25 fps cap
+        const dt = ts - lastTime;
+        lastTime = ts;
+        frameCount++;
+        if (frameCount % 15 === 0) fps = Math.round(1000 / dt);
+        if (video.readyState < 2) return;
+
+        // ── 1. Grab frame
+        pctx.drawImage(video, 0, 0, CFG.procW, CFG.procH);
+        const imgData = pctx.getImageData(0, 0, CFG.procW, CFG.procH);
+
+        // ── 2. Greyscale
+        const grey = toGreyscale(imgData.data, CFG.procW, CFG.procH);
+
+        // ── 3. Contrast normalise (inside ROI only, avoids sky blowing histogram)
+        normalizeContrast(grey, CFG.procW, CFG.procH);
+
+        // ── 4. Gaussian blur
+        const blurred = gaussianBlur(grey, CFG.procW, CFG.procH);
+
+        // ── 5. Canny edges
+        const edges = canny(
+          blurred,
+          CFG.procW,
+          CFG.procH,
+          CFG.cannyLo,
+          CFG.cannyHi,
+        );
+
+        // ── 6. ROI mask
+        const roiEdges = applyROI(edges, CFG.procW, CFG.procH);
+
+        // ── 7. Hough accumulator
+        const peaks = houghAccumulate(roiEdges, CFG.procW, CFG.procH);
+
+        // ── 8. Classify peaks → left / right segments
+        const { left, right, allSegs } = classifyPeaks(
+          peaks,
+          CFG.procW,
+          CFG.procH,
+        );
+
+        // ── 9. Fit & smooth
+        updateLanes(left, right, allSegs, CFG.procW, CFG.procH);
+
+        // ── 10. Drift
+        computeDrift(CFG.procW, CFG.procH);
+
+        // ── 11. Render
+        render(roiEdges);
+        handleAlerts();
+
+        statFps.textContent = `FPS: ${fps}`;
+        statConf.textContent = `CONF: ${Math.round(laneConf * 100)}%`;
+        statLines.textContent = `PEAKS: ${peaks.length}`;
+      }
+
+      // ══════════════════════════════════════════════
+      //  IMAGE PROCESSING
+      // ══════════════════════════════════════════════
+
+      function toGreyscale(data, w, h) {
+        const g = new Float32Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+          const p = i * 4;
+          g[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+        }
+        return g;
+      }
+
+      function normalizeContrast(g, w, h) {
+        // Collect pixel values in the lower 60% of the image (road area)
+        const yStart = Math.round(h * CFG.roiTop);
+        const vals = [];
+        for (let y = yStart; y < h; y++)
+          for (let x = 0; x < w; x++) vals.push(g[y * w + x]);
+        vals.sort((a, b) => a - b);
+        const lo = vals[Math.floor(vals.length * CFG.normLo)];
+        const hi = vals[Math.floor(vals.length * CFG.normHi)];
+        const range = hi - lo || 1;
+        for (let i = 0; i < g.length; i++)
+          g[i] = Math.max(0, Math.min(255, ((g[i] - lo) / range) * 255));
+      }
+
+      function gaussianBlur(src, w, h) {
+        const k = [
+          2, 4, 5, 4, 2, 4, 9, 12, 9, 4, 5, 12, 15, 12, 5, 4, 9, 12, 9, 4, 2, 4,
+          5, 4, 2,
+        ];
+        const ksum = 159;
+        const dst = new Float32Array(w * h);
+        for (let y = 2; y < h - 2; y++) {
+          for (let x = 2; x < w - 2; x++) {
+            let v = 0,
+              ki = 0;
+            for (let ky = -2; ky <= 2; ky++)
+              for (let kx = -2; kx <= 2; kx++)
+                v += src[(y + ky) * w + (x + kx)] * k[ki++];
+            dst[y * w + x] = v / ksum;
+          }
+        }
+        return dst;
+      }
+
+      function canny(g, w, h, lo, hi) {
+        const gx = new Float32Array(w * h),
+          gy = new Float32Array(w * h);
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const i = y * w + x;
+            gx[i] =
+              -g[i - w - 1] +
+              g[i - w + 1] -
+              2 * g[i - 1] +
+              2 * g[i + 1] -
+              g[i + w - 1] +
+              g[i + w + 1];
+            gy[i] =
+              -g[i - w - 1] -
+              2 * g[i - w] -
+              g[i - w + 1] +
+              g[i + w - 1] +
+              2 * g[i + w] +
+              g[i + w + 1];
+          }
+        }
+        const mag = new Float32Array(w * h),
+          ang = new Float32Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+          mag[i] = Math.hypot(gx[i], gy[i]);
+          ang[i] = Math.atan2(gy[i], gx[i]);
+        }
+
+        const nms = new Float32Array(w * h);
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const i = y * w + x;
+            const a = ((ang[i] * 180) / Math.PI + 180) % 180;
+            let q, r;
+            if (a < 22.5 || a >= 157.5) {
+              q = mag[i - 1];
+              r = mag[i + 1];
+            } else if (a < 67.5) {
+              q = mag[i - w + 1];
+              r = mag[i + w - 1];
+            } else if (a < 112.5) {
+              q = mag[i - w];
+              r = mag[i + w];
+            } else {
+              q = mag[i - w - 1];
+              r = mag[i + w + 1];
+            }
+            nms[i] = mag[i] >= q && mag[i] >= r ? mag[i] : 0;
+          }
+        }
+
+        const edges = new Uint8Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+          if (nms[i] >= hi) edges[i] = 255;
+          else if (nms[i] >= lo) edges[i] = 128;
+        }
+        // Hysteresis
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const i = y * w + x;
+            if (edges[i] === 128) {
+              edges[i] =
+                edges[i - 1] === 255 ||
+                edges[i + 1] === 255 ||
+                edges[i - w] === 255 ||
+                edges[i + w] === 255 ||
+                edges[i - w - 1] === 255 ||
+                edges[i - w + 1] === 255 ||
+                edges[i + w - 1] === 255 ||
+                edges[i + w + 1] === 255
+                  ? 255
+                  : 0;
+            }
+          }
+        }
+        return edges;
+      }
+
+      function applyROI(edges, w, h) {
+        const out = new Uint8Array(w * h);
+        const yTop = Math.round(h * CFG.roiTop);
+        const yBot = Math.round(h * CFG.roiBot);
+        const cx = w / 2;
+        for (let y = yTop; y < yBot; y++) {
+          // Trapezoidal mask interpolated from top to bottom
+          const t = (y - yTop) / (yBot - yTop);
+          const halfW = (CFG.roiTopW + t * (CFG.roiBotW - CFG.roiTopW)) * w;
+          const xL = Math.round(cx - halfW);
+          const xR = Math.round(cx + halfW);
+          for (let x = Math.max(0, xL); x < Math.min(w, xR); x++)
+            out[y * w + x] = edges[y * w + x];
+        }
+        return out;
+      }
+
+      // ══════════════════════════════════════════════
+      //  STANDARD HOUGH TRANSFORM (rho/theta voting)
+      // ══════════════════════════════════════════════
+
+      function houghAccumulate(edges, w, h) {
+        // Clear accumulator
+        accum.fill(0);
+
+        // Vote
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (edges[y * w + x] !== 255) continue;
+            for (let t = 0; t < THETA_BINS; t++) {
+              const rho = x * cosT[t] + y * sinT[t];
+              const rBin = Math.round(rho / CFG.houghRho) + RHO_OFF;
+              if (rBin >= 0 && rBin < RHO_BINS) accum[t * RHO_BINS + rBin]++;
+            }
+          }
+        }
+
+        // Extract peaks with suppression
+        const peaks = [];
+        const suppressed = new Uint8Array(THETA_BINS * RHO_BINS);
+
+        for (let iter = 0; iter < CFG.numPeaks; iter++) {
+          let best = CFG.houghPeak - 1,
+            bt = -1,
+            br = -1;
+          for (let t = 0; t < THETA_BINS; t++) {
+            for (let r = 0; r < RHO_BINS; r++) {
+              const v = accum[t * RHO_BINS + r];
+              if (!suppressed[t * RHO_BINS + r] && v > best) {
+                best = v;
+                bt = t;
+                br = r;
+              }
+            }
+          }
+          if (bt < 0) break;
+
+          const theta = (bt * CFG.houghTheta * Math.PI) / 180;
+          const rho = (br - RHO_OFF) * CFG.houghRho;
+          peaks.push({ theta, rho, votes: best });
+
+          // Suppress neighbourhood
+          for (let dt = -3; dt <= 3; dt++) {
+            for (let dr = -CFG.peakSuppress; dr <= CFG.peakSuppress; dr++) {
+              const nt = bt + dt,
+                nr = br + dr;
+              if (nt >= 0 && nt < THETA_BINS && nr >= 0 && nr < RHO_BINS)
+                suppressed[nt * RHO_BINS + nr] = 1;
+            }
+          }
+        }
+        return peaks;
+      }
+
+      // ── Convert Hough peak → segment endpoints at ROI bounds
+      function peakToSegment(theta, rho, w, h) {
+        const cosA = Math.cos(theta),
+          sinA = Math.sin(theta);
+        const yBot = Math.round(h * CFG.roiBot);
+        const yTop = Math.round(h * (CFG.roiTop + 0.04));
+
+        // x = (rho - y*sinA) / cosA  (handles near-vertical lines too)
+        function xAt(y) {
+          if (Math.abs(cosA) > 0.01) return (rho - y * sinA) / cosA;
+          return (rho - y * sinA) / (cosA + 1e-9); // fallback
+        }
+        return { x1: xAt(yBot), y1: yBot, x2: xAt(yTop), y2: yTop };
+      }
+
+      // ── Classify peaks into left / right lanes
+      function classifyPeaks(peaks, w, h) {
+        const left = [],
+          right = [],
+          allSegs = [];
+        const cx = w / 2;
+
+        for (const p of peaks) {
+          const deg = ((p.theta * 180) / Math.PI) % 180;
+          // Convert Hough angle (from horizontal) to slope angle
+          // theta=0 → vertical line; theta=90 → horizontal line
+          // Lane lines are ~20–75° from horizontal → theta ~15–70°
+          const fromHoriz = Math.abs(90 - deg); // degrees from horizontal
+          if (fromHoriz < CFG.angleLo || fromHoriz > CFG.angleHi) continue;
+
+          const seg = peakToSegment(p.theta, p.rho, w, h);
+          allSegs.push(seg);
+
+          // Classify by mid-x position and slope sign
+          const midX = (seg.x1 + seg.x2) / 2;
+          const dx = seg.x2 - seg.x1;
+          const dy = seg.y2 - seg.y1;
+          const slope = Math.abs(dx) > 0.1 ? dy / dx : 99;
+
+          // Left lane: on left side, converges upward (x2 < x1 means going up-right)
+          // Right lane: on right side
+          if (midX < cx && slope < 0) left.push({ seg, votes: p.votes });
+          else if (midX > cx && slope > 0) right.push({ seg, votes: p.votes });
+          // Also accept if clearly on one side even if slope sign is off (wide roads)
+          else if (midX < cx * 0.7) left.push({ seg, votes: p.votes });
+          else if (midX > cx * 1.3) right.push({ seg, votes: p.votes });
+        }
+        return { left, right, allSegs };
+      }
+
+      // ── Weighted average of segments (by vote count)
+      function fitWeightedLine(segs, w, h) {
+        if (!segs.length) return null;
+        let tx1 = 0,
+          ty1 = 0,
+          tx2 = 0,
+          ty2 = 0,
+          tw = 0;
+        for (const { seg, votes } of segs) {
+          const w2 = votes;
+          tx1 += seg.x1 * w2;
+          ty1 += seg.y1 * w2;
+          tx2 += seg.x2 * w2;
+          ty2 += seg.y2 * w2;
+          tw += w2;
+        }
+        if (tw < 1) return null;
+        return { x1: tx1 / tw, y1: ty1 / tw, x2: tx2 / tw, y2: ty2 / tw };
+      }
+
+      function ema(prev, curr, alpha) {
+        if (!prev) return curr;
+        if (!curr)
+          return {
+            x1: prev.x1,
+            y1: prev.y1,
+            x2: prev.x2,
+            y2: prev.y2,
+          };
+        return {
+          x1: prev.x1 * (1 - alpha) + curr.x1 * alpha,
+          y1: prev.y1 * (1 - alpha) + curr.y1 * alpha,
+          x2: prev.x2 * (1 - alpha) + curr.x2 * alpha,
+          y2: prev.y2 * (1 - alpha) + curr.y2 * alpha,
+        };
+      }
+
+      function updateLanes(leftSegs, rightSegs, allSegs, w, h) {
+        const newL = fitWeightedLine(leftSegs, w, h);
+        const newR = fitWeightedLine(rightSegs, w, h);
+
+        if (newL) {
+          smoothL = ema(smoothL, newL, CFG.smoothing);
+          missFrames = 0;
         } else {
-          edges[i] = 0;
+          missFrames++;
         }
+        if (newR) smoothR = ema(smoothR, newR, CFG.smoothing);
+
+        // Drop stale lanes after too many missed frames
+        if (missFrames > CFG.missThreshold) {
+          smoothL = null;
+          smoothR = null;
+        }
+
+        leftLane = smoothL;
+        rightLane = smoothR;
+
+        const hasL = !!leftLane,
+          hasR = !!rightLane;
+        // Confidence also factors in peak count
+        const baseConf = hasL && hasR ? 1.0 : hasL || hasR ? 0.55 : 0.0;
+        const peakBoost = Math.min(1, allSegs.length / 4);
+        laneConf = baseConf * (0.5 + 0.5 * peakBoost);
       }
-    }
-  }
-  return edges;
-}
 
-function applyROI(edges, w, h) {
-  const out = new Uint8Array(w * h);
-  const yTop    = Math.round(h * CFG.roiTopFrac);
-  const yBottom = h - Math.round(h * CFG.roiBottomFrac);
-  // Trapezoid: narrow at top, wide at bottom
-  for (let y = yTop; y < yBottom; y++) {
-    const frac = (y - yTop) / (yBottom - yTop);
-    const xLeft  = Math.round(w * 0.05 + (w * 0.0) * (1 - frac));
-    const xRight = Math.round(w * 0.95 - (w * 0.0) * (1 - frac));
-    for (let x = xLeft; x < xRight; x++) {
-      out[y * w + x] = edges[y * w + x];
-    }
-  }
-  return out;
-}
+      // ── Drift
+      function computeDrift(w, h) {
+        if (!leftLane && !rightLane) {
+          driftPct = 0;
+          return;
+        }
+        const yRef = h * 0.85;
 
-// ── Probabilistic Hough Transform ───────────────
-function houghLines(edges, w, h) {
-  const lines = [];
-  const visited = new Uint8Array(w * h);
+        function xAtY(lane, y) {
+          const dx = lane.x2 - lane.x1,
+            dy = lane.y2 - lane.y1;
+          if (Math.abs(dy) < 0.1) return lane.x1;
+          return lane.x1 + ((y - lane.y1) * dx) / dy;
+        }
 
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      if (edges[i] !== 255 || visited[i]) continue;
+        const lx = leftLane ? xAtY(leftLane, yRef) : null;
+        const rx = rightLane ? xAtY(rightLane, yRef) : null;
+        const carX = w / 2;
 
-      // Try to grow a line from this point
-      // Estimate local angle from neighbors
-      let bestLine = null;
-      let bestCount = 0;
+        if (lx !== null && rx !== null) {
+          const center = (lx + rx) / 2;
+          const width = Math.abs(rx - lx);
+          driftPct = width > 20 ? (carX - center) / (width / 2) : 0;
+        } else if (lx !== null) {
+          // Only left lane — estimate right edge ~half-screen away
+          driftPct = Math.max(-1, (carX - lx) / (w * 0.35) - 1);
+        } else {
+          driftPct = Math.min(1, 1 - (rx - carX) / (w * 0.35));
+        }
+        driftPct = Math.max(-1, Math.min(1, driftPct));
+      }
 
-      // Sample several angles
-      for (let aIdx = 0; aIdx < 12; aIdx++) {
-        const angle = (aIdx / 12) * Math.PI;
-        const cos = Math.cos(angle), sin = Math.sin(angle);
+      // ══════════════════════════════════════════════
+      //  RENDER
+      // ══════════════════════════════════════════════
 
-        let x1 = x, y1 = y, x2 = x, y2 = y;
-        let count = 1;
+      function render(roiEdges) {
+        const dW = canvas.width,
+          dH = canvas.height;
+        const scX = dW / CFG.procW,
+          scY = dH / CFG.procH;
+        ctx.clearRect(0, 0, dW, dH);
 
-        // Walk forward
-        for (let step = 1; step <= 80; step++) {
-          const nx = Math.round(x + cos * step);
-          const ny = Math.round(y + sin * step);
-          if (nx < 0 || nx >= w || ny < 0 || ny >= h) break;
-          const ni = ny * w + nx;
-          if (edges[ni] !== 255) {
-            // Allow small gaps
-            const nx2 = Math.round(x + cos * (step + 1));
-            const ny2 = Math.round(y + sin * (step + 1));
-            if (nx2 < 0 || nx2 >= w || ny2 < 0 || ny2 >= h) break;
-            if (edges[ny2 * w + nx2] !== 255) break;
+        // Debug edge overlay
+        if (debugMode) {
+          const id = dbgCtx.createImageData(CFG.procW, CFG.procH);
+          for (let i = 0; i < roiEdges.length; i++) {
+            const v = roiEdges[i];
+            id.data[i * 4] = v === 255 ? 0 : 0;
+            id.data[i * 4 + 1] = v === 255 ? 255 : 0;
+            id.data[i * 4 + 2] = v === 255 ? 80 : 0;
+            id.data[i * 4 + 3] = v === 255 ? 200 : 0;
           }
-          x2 = nx; y2 = ny; count++;
-        }
-        // Walk backward
-        for (let step = 1; step <= 80; step++) {
-          const nx = Math.round(x - cos * step);
-          const ny = Math.round(y - sin * step);
-          if (nx < 0 || nx >= w || ny < 0 || ny >= h) break;
-          const ni = ny * w + nx;
-          if (edges[ni] !== 255) {
-            const nx2 = Math.round(x - cos * (step + 1));
-            const ny2 = Math.round(y - sin * (step + 1));
-            if (nx2 < 0 || nx2 >= w || ny2 < 0 || ny2 >= h) break;
-            if (edges[ny2 * w + nx2] !== 255) break;
-          }
-          x1 = nx; y1 = ny; count++;
+          dbgCtx.putImageData(id, 0, 0);
         }
 
-        const len = Math.hypot(x2 - x1, y2 - y1);
-        if (len >= CFG.minLineLen && count > bestCount) {
-          bestCount = count;
-          bestLine = { x1, y1, x2, y2 };
+        if (!leftLane && !rightLane) {
+          updateStatus("searching");
+          updateDriftUI();
+          return;
         }
+
+        function sc(l) {
+          return l
+            ? { x1: l.x1 * scX, y1: l.y1 * scY, x2: l.x2 * scX, y2: l.y2 * scY }
+            : null;
+        }
+        const L = sc(leftLane),
+          R = sc(rightLane);
+
+        const isDanger = Math.abs(driftPct) > CFG.driftDanger;
+        const isWarn = Math.abs(driftPct) > CFG.driftThreshold;
+        const lineColor = isDanger ? "#ff3355" : isWarn ? "#ffcc00" : "#00ff88";
+
+        // Lane fill polygon
+        if (L && R) {
+          const grad = ctx.createLinearGradient(0, L.y1 * scY, 0, L.y2 * scY);
+          const alpha = isDanger ? 0.22 : 0.1;
+          const col = isDanger ? `255,51,85` : `0,255,136`;
+          grad.addColorStop(0, `rgba(${col},${alpha})`);
+          grad.addColorStop(1, `rgba(${col},0.02)`);
+          ctx.beginPath();
+          ctx.moveTo(L.x1, L.y1);
+          ctx.lineTo(L.x2, L.y2);
+          ctx.lineTo(R.x2, R.y2);
+          ctx.lineTo(R.x1, R.y1);
+          ctx.closePath();
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+
+        // Lane lines
+        function drawLane(l, color) {
+          if (!l) return;
+          ctx.save();
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 20;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 4.5;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(l.x1, l.y1);
+          ctx.lineTo(l.x2, l.y2);
+          ctx.stroke();
+          ctx.shadowBlur = 3;
+          ctx.strokeStyle = "rgba(255,255,255,0.55)";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.restore();
+        }
+        drawLane(L, lineColor);
+        drawLane(R, lineColor);
+
+        // Center guide
+        if (L && R) {
+          ctx.save();
+          ctx.setLineDash([10, 16]);
+          ctx.strokeStyle = "rgba(255,255,255,0.13)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo((L.x1 + R.x1) / 2, (L.y1 + R.y1) / 2);
+          ctx.lineTo((L.x2 + R.x2) / 2, (L.y2 + R.y2) / 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        if (isDanger) updateStatus("danger");
+        else if (isWarn) updateStatus("warn");
+        else updateStatus("ok");
+        updateDriftUI();
       }
 
-      if (bestLine) {
-        lines.push(bestLine);
-        // Mark visited along the line
-        visited[y * w + x] = 1;
+      function updateStatus(state) {
+        const msgs = {
+          ok: "● LANE CENTERED",
+          warn: "◈ DRIFT DETECTED",
+          danger: "⚠ LANE DEPARTURE",
+          searching: "SCANNING FOR LANES…",
+        };
+        statusEl.textContent = msgs[state];
+        statusEl.className = state;
       }
-    }
-  }
-  return lines;
-}
 
-// ── Lane Classification ──────────────────────────
-function classifyLines(lines, w, h) {
-  const left = [], right = [];
-  const cx = w / 2;
+      function updateDriftUI() {
+        const pct = Math.max(-1, Math.min(1, driftPct));
+        needle.style.left = 50 + pct * 45 + "%";
+        const isDanger = Math.abs(pct) > CFG.driftDanger;
+        const isWarn = Math.abs(pct) > CFG.driftThreshold;
+        needle.className = isDanger ? "danger" : isWarn ? "warn" : "";
+        flash.className = isDanger ? "active" : "";
+      }
 
-  for (const l of lines) {
-    const dx = l.x2 - l.x1;
-    const dy = l.y2 - l.y1;
-    if (Math.abs(dx) < 1) continue;
-    const slope = dy / dx;
-    const absSlope = Math.abs(slope);
-
-    if (absSlope < CFG.slopeFilter[0] || absSlope > CFG.slopeFilter[1]) continue;
-
-    const midX = (l.x1 + l.x2) / 2;
-    if (slope < 0 && midX < cx) left.push(l);
-    else if (slope > 0 && midX > cx) right.push(l);
-  }
-  return { left, right };
-}
-
-// ── Lane Averaging + Smoothing ───────────────────
-function fitLine(lines, w, h) {
-  if (!lines.length) return null;
-  // Weighted average of slope and intercept by line length
-  let sw = 0, sb = 0, tw = 0;
-  for (const l of lines) {
-    const dx = l.x2 - l.x1;
-    const dy = l.y2 - l.y1;
-    if (Math.abs(dx) < 1) continue;
-    const slope = dy / dx;
-    const b = l.y1 - slope * l.x1;
-    const len = Math.hypot(dx, dy);
-    sw += slope * len;
-    sb += b * len;
-    tw += len;
-  }
-  if (tw < 1) return null;
-  const slope = sw / tw;
-  const b     = sb / tw;
-
-  // Extend to ROI bounds
-  const yBottom = h - Math.round(h * CFG.roiBottomFrac);
-  const yTop    = Math.round(h * (CFG.roiTopFrac + 0.05));
-  const x1 = (yBottom - b) / slope;
-  const x2 = (yTop    - b) / slope;
-  return { x1, y1: yBottom, x2, y2: yTop };
-}
-
-function ema(prev, curr, alpha) {
-  if (!prev) return curr;
-  if (!curr) return prev;
-  return {
-    x1: prev.x1 * (1-alpha) + curr.x1 * alpha,
-    y1: prev.y1 * (1-alpha) + curr.y1 * alpha,
-    x2: prev.x2 * (1-alpha) + curr.x2 * alpha,
-    y2: prev.y2 * (1-alpha) + curr.y2 * alpha,
-  };
-}
-
-function updateLanes(leftLines, rightLines, w, h) {
-  const newL = fitLine(leftLines, w, h);
-  const newR = fitLine(rightLines, w, h);
-  smoothL = ema(smoothL, newL, CFG.smoothing);
-  smoothR = ema(smoothR, newR, CFG.smoothing);
-  leftLane  = smoothL;
-  rightLane = smoothR;
-
-  const hasL = !!leftLane,  hasR = !!rightLane;
-  laneConf = hasL && hasR ? 1 : hasL || hasR ? 0.5 : 0;
-}
-
-// ── Drift Calculation ────────────────────────────
-function computeDrift(w, h) {
-  if (!leftLane && !rightLane) { driftPct = 0; return; }
-
-  const yRef = h * 0.85;
-  let lx = null, rx = null;
-
-  if (leftLane) {
-    const slope = (leftLane.y2 - leftLane.y1) / (leftLane.x2 - leftLane.x1 + 1e-9);
-    const b = leftLane.y1 - slope * leftLane.x1;
-    lx = (yRef - b) / slope;
-  }
-  if (rightLane) {
-    const slope = (rightLane.y2 - rightLane.y1) / (rightLane.x2 - rightLane.x1 + 1e-9);
-    const b = rightLane.y1 - slope * rightLane.x1;
-    rx = (yRef - b) / slope;
-  }
-
-  const carX = w / 2;
-  if (lx !== null && rx !== null) {
-    const laneCenter = (lx + rx) / 2;
-    const laneWidth  = Math.abs(rx - lx);
-    driftPct = laneWidth > 0 ? (carX - laneCenter) / (laneWidth / 2) : 0;
-  } else if (lx !== null) {
-    driftPct = Math.max(-1, Math.min(1, (carX - lx - 60) / 60 - 1));
-  } else if (rx !== null) {
-    driftPct = Math.max(-1, Math.min(1, (carX - rx + 60) / 60 + 1));
-  }
-
-  driftPct = Math.max(-1, Math.min(1, driftPct));
-}
-
-// ── Render ───────────────────────────────────────
-function render() {
-  const dW = canvas.width;
-  const dH = canvas.height;
-  const scX = dW / CFG.procW;
-  const scY = dH / CFG.procH;
-
-  ctx.clearRect(0, 0, dW, dH);
-
-  if (!leftLane && !rightLane) {
-    updateStatus('searching');
-    updateDriftUI();
-    return;
-  }
-
-  // Scale lane coords to display size
-  function scale(l) {
-    return l ? {
-      x1: l.x1 * scX, y1: l.y1 * scY,
-      x2: l.x2 * scX, y2: l.y2 * scY,
-    } : null;
-  }
-  const L = scale(leftLane);
-  const R = scale(rightLane);
-
-  const isDanger = Math.abs(driftPct) > CFG.driftDanger;
-  const isWarn   = Math.abs(driftPct) > CFG.driftThreshold;
-  const lineColor = isDanger ? '#ff3355' : isWarn ? '#ffcc00' : '#00ff88';
-  const fillAlpha = isDanger ? 0.18 : isWarn ? 0.12 : 0.08;
-
-  // Fill lane polygon
-  if (L && R) {
-    ctx.beginPath();
-    ctx.moveTo(L.x1, L.y1);
-    ctx.lineTo(L.x2, L.y2);
-    ctx.lineTo(R.x2, R.y2);
-    ctx.lineTo(R.x1, R.y1);
-    ctx.closePath();
-    ctx.fillStyle = isDanger
-      ? `rgba(255,51,85,${fillAlpha})`
-      : `rgba(0,255,136,${fillAlpha})`;
-    ctx.fill();
-  }
-
-  // Draw lane lines with glow
-  function drawLane(l, color) {
-    if (!l) return;
-    ctx.save();
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 18;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(l.x1, l.y1);
-    ctx.lineTo(l.x2, l.y2);
-    ctx.stroke();
-    // Inner bright line
-    ctx.shadowBlur = 4;
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  drawLane(L, lineColor);
-  drawLane(R, lineColor);
-
-  // Center dashed guide
-  if (L && R) {
-    const cx1 = (L.x1 + R.x1) / 2, cy1 = (L.y1 + R.y1) / 2;
-    const cx2 = (L.x2 + R.x2) / 2, cy2 = (L.y2 + R.y2) / 2;
-    ctx.save();
-    ctx.setLineDash([12, 18]);
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx1, cy1);
-    ctx.lineTo(cx2, cy2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Status
-  if (isDanger) updateStatus('danger');
-  else if (isWarn) updateStatus('warn');
-  else updateStatus('ok');
-
-  updateDriftUI();
-}
-
-function updateStatus(state) {
-  const msgs = {
-    ok:       '● LANE CENTERED',
-    warn:     '◈ DRIFT DETECTED',
-    danger:   '⚠ LANE DEPARTURE',
-    searching:'SCANNING FOR LANES…',
-  };
-  statusEl.textContent = msgs[state];
-  statusEl.className   = state;
-}
-
-function updateDriftUI() {
-  // Move needle: 0% = center, ±100% = edges
-  const pct = Math.max(-1, Math.min(1, driftPct));
-  const pos  = 50 + pct * 45; // 5%–95%
-  needle.style.left = pos + '%';
-
-  const isDanger = Math.abs(pct) > CFG.driftDanger;
-  const isWarn   = Math.abs(pct) > CFG.driftThreshold;
-  needle.className = isDanger ? 'danger' : isWarn ? 'warn' : '';
-
-  flash.className = isDanger ? 'active' : '';
-}
-
-// ── Alerts ───────────────────────────────────────
-function handleAlerts() {
-  const isDanger = Math.abs(driftPct) > CFG.driftDanger && laneConf > 0.8;
-  const isWarn   = Math.abs(driftPct) > CFG.driftThreshold && laneConf > 0.5;
-  const now = Date.now();
-
-  if (isDanger && now - lastVibe > 600) {
-    vibrate([200, 80, 200, 80, 200]);
-    lastVibe = now;
-  } else if (isWarn && now - lastVibe > 1500) {
-    vibrate([120, 60, 120]);
-    lastVibe = now;
-  }
-}
-
-function vibrate(pattern) {
-  if (navigator.vibrate) {
-    navigator.vibrate(pattern);
-  }
-}
-</script>
-</body>
+      // ── Haptic alerts
+      function handleAlerts() {
+        const isDanger = Math.abs(driftPct) > CFG.driftDanger && laneConf > 0.6;
+        const isWarn =
+          Math.abs(driftPct) > CFG.driftThreshold && laneConf > 0.4;
+        const now = Date.now();
+        if (isDanger && now - lastVibe > 600) {
+          navigator.vibrate?.([200, 80, 200, 80, 200]);
+          lastVibe = now;
+        } else if (isWarn && now - lastVibe > 1500) {
+          navigator.vibrate?.([120, 60, 120]);
+          lastVibe = now;
+        }
+      }
+    </script>
+  </body>
 </html>
