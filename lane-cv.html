@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Lane CV</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; background: #000; color: #0f0; font-family: monospace; overflow: hidden; }
+
+      #stage {
+        position: fixed; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: #000;
+      }
+
+      video, #overlay {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        object-fit: cover;
+      }
+      video { z-index: 1; }
+      #overlay { z-index: 2; pointer-events: none; }
+
+      #hud {
+        position: fixed;
+        top: env(safe-area-inset-top, 8px);
+        left: 8px; right: 8px;
+        display: flex; justify-content: space-between;
+        font-size: 12px;
+        z-index: 5; pointer-events: none;
+      }
+      #hud span {
+        background: rgba(0,0,0,0.55);
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(0,255,0,0.3);
+      }
+
+      #depart {
+        position: fixed;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(220, 30, 30, 0.85);
+        color: #fff;
+        padding: 14px 26px;
+        font-size: 22px; font-weight: bold;
+        border-radius: 8px;
+        z-index: 6;
+        display: none;
+        letter-spacing: 0.1em;
+      }
+
+      #controls {
+        position: fixed;
+        bottom: env(safe-area-inset-bottom, 12px);
+        left: 8px; right: 8px;
+        display: flex; gap: 8px;
+        z-index: 5;
+      }
+      button {
+        flex: 1;
+        background: rgba(0, 0, 0, 0.7);
+        color: #0f0;
+        border: 1px solid #0f0;
+        padding: 12px;
+        font-family: monospace;
+        font-size: 14px;
+        border-radius: 6px;
+      }
+      button:active { background: rgba(0, 255, 0, 0.2); }
+      button.off { color: #888; border-color: #555; }
+
+      #start {
+        position: fixed; inset: 0;
+        background: #000;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        z-index: 10; gap: 1rem;
+        padding: 2rem; text-align: center;
+      }
+      #start h1 { color: #0f0; letter-spacing: 0.3em; font-size: 1.5rem; }
+      #start p { color: #888; max-width: 380px; font-size: 0.85rem; line-height: 1.6; }
+      #start button {
+        flex: none; min-width: 200px; padding: 16px 32px; font-size: 18px;
+        margin-top: 1rem;
+      }
+      .warn { color: #fa3 !important; font-size: 0.75rem !important; }
+    </style>
+  </head>
+  <body>
+    <div id="start">
+      <h1>LANE CV</h1>
+      <p>
+        Detects lane markings using the rear camera and vibrates briefly
+        when the car crosses a detected lane line.
+      </p>
+      <p class="warn">
+        Experimental. Do not stare at the screen. Do not rely on this for safety.
+        Mount your phone so the road fills the lower half of the frame.
+      </p>
+      <button id="startBtn">START</button>
+    </div>
+
+    <div id="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <div id="hud">
+      <span id="fps">– fps</span>
+      <span id="state">–</span>
+    </div>
+
+    <div id="depart">LANE DEPARTURE</div>
+
+    <div id="controls">
+      <button id="vibBtn">VIBRATE: ON</button>
+      <button id="dbgBtn" class="off">EDGES: OFF</button>
+      <button id="fsBtn">FULLSCREEN</button>
+    </div>
+
+    <script>
+      const video = document.getElementById("video");
+      const overlay = document.getElementById("overlay");
+      const octx = overlay.getContext("2d");
+      const fpsEl = document.getElementById("fps");
+      const stateEl = document.getElementById("state");
+      const departEl = document.getElementById("depart");
+      const vibBtn = document.getElementById("vibBtn");
+      const dbgBtn = document.getElementById("dbgBtn");
+      const fsBtn = document.getElementById("fsBtn");
+      const startScreen = document.getElementById("start");
+      const startBtn = document.getElementById("startBtn");
+
+      // Processing resolution — small for speed on phones.
+      const PW = 320, PH = 240;
+      const work = document.createElement("canvas");
+      work.width = PW; work.height = PH;
+      const wctx = work.getContext("2d", { willReadFrequently: true });
+
+      // Reusable buffers
+      const gray = new Uint8ClampedArray(PW * PH);
+      const edges = new Uint8ClampedArray(PW * PH);
+
+      // ROI trapezoid (in processing-resolution coords): lower portion of frame.
+      const ROI = {
+        topY: Math.floor(PH * 0.55),
+        botY: PH - 1,
+        topLeftX: Math.floor(PW * 0.30),
+        topRightX: Math.floor(PW * 0.70),
+        botLeftX: 0,
+        botRightX: PW - 1,
+      };
+
+      let vibrateOn = true;
+      let debugEdges = false;
+      let prevInside = true;     // for edge-trigger of vibration
+      let wakeLock = null;
+
+      // Temporal smoothing of detected lines
+      let smoothLeft = null;     // { m, b }   line: x = m*y + b  (using y as independent)
+      let smoothRight = null;
+      const SMOOTH = 0.7;        // weight of previous
+
+      vibBtn.addEventListener("click", () => {
+        vibrateOn = !vibrateOn;
+        vibBtn.textContent = `VIBRATE: ${vibrateOn ? "ON" : "OFF"}`;
+        vibBtn.classList.toggle("off", !vibrateOn);
+      });
+      dbgBtn.addEventListener("click", () => {
+        debugEdges = !debugEdges;
+        dbgBtn.textContent = `EDGES: ${debugEdges ? "ON" : "OFF"}`;
+        dbgBtn.classList.toggle("off", !debugEdges);
+      });
+      fsBtn.addEventListener("click", async () => {
+        if (!document.fullscreenElement) {
+          try { await document.documentElement.requestFullscreen(); } catch {}
+        } else {
+          try { await document.exitFullscreen(); } catch {}
+        }
+      });
+
+      startBtn.addEventListener("click", async () => {
+        startBtn.disabled = true;
+        startBtn.textContent = "STARTING…";
+        try {
+          await initCamera();
+          startScreen.style.display = "none";
+          requestWakeLock();
+          loop();
+        } catch (err) {
+          startBtn.disabled = false;
+          startBtn.textContent = "START";
+          alert("Camera failed: " + err.message);
+        }
+      });
+
+      async function initCamera() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+        video.srcObject = stream;
+        await new Promise((res) => {
+          if (video.readyState >= 2) return res();
+          video.onloadedmetadata = () => res();
+        });
+        await video.play();
+        sizeOverlay();
+        window.addEventListener("resize", sizeOverlay);
+      }
+
+      function sizeOverlay() {
+        overlay.width = overlay.clientWidth * devicePixelRatio;
+        overlay.height = overlay.clientHeight * devicePixelRatio;
+      }
+
+      async function requestWakeLock() {
+        try {
+          if ("wakeLock" in navigator) {
+            wakeLock = await navigator.wakeLock.request("screen");
+            document.addEventListener("visibilitychange", async () => {
+              if (document.visibilityState === "visible" && wakeLock === null) {
+                try { wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+              }
+            });
+          }
+        } catch {}
+      }
+
+      // ---- Image processing ----
+
+      function toGray(imgData) {
+        const d = imgData.data;
+        for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+          // ITU-R BT.601 luma
+          gray[j] = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) >> 10;
+          // >>10 ≈ /1024; close enough to /1000 and keeps it fast.
+        }
+      }
+
+      function sobel(thresh = 70) {
+        // Compute edges only inside ROI for speed.
+        edges.fill(0);
+        const yMin = Math.max(1, ROI.topY);
+        const yMax = Math.min(PH - 2, ROI.botY);
+        for (let y = yMin; y <= yMax; y++) {
+          // Trapezoid bounds at this y
+          const t = (y - ROI.topY) / (ROI.botY - ROI.topY);
+          const xMin = Math.max(1, Math.floor(ROI.topLeftX + (ROI.botLeftX - ROI.topLeftX) * t));
+          const xMax = Math.min(PW - 2, Math.ceil(ROI.topRightX + (ROI.botRightX - ROI.topRightX) * t));
+          const row = y * PW;
+          for (let x = xMin; x <= xMax; x++) {
+            const i = row + x;
+            const tl = gray[i - PW - 1], tc = gray[i - PW], tr = gray[i - PW + 1];
+            const ml = gray[i - 1],                       mr = gray[i + 1];
+            const bl = gray[i + PW - 1], bc = gray[i + PW], br = gray[i + PW + 1];
+            const gx = -tl - 2 * ml - bl + tr + 2 * mr + br;
+            const gy = -tl - 2 * tc - tr + bl + 2 * bc + br;
+            const mag = Math.abs(gx) + Math.abs(gy);
+            if (mag > thresh) edges[i] = 255;
+          }
+        }
+      }
+
+      // Hough transform restricted to slopes plausible for lane lines.
+      // We use the line form: x = m*y + b  (good for near-vertical lines).
+      // Sample m ∈ [-1.5, -0.25] for left, [0.25, 1.5] for right.
+      function houghLineFit(side) {
+        // side: -1 left, +1 right
+        const mMin = side < 0 ? -1.6 : 0.25;
+        const mMax = side < 0 ? -0.25 : 1.6;
+        const M_STEPS = 28;
+        const B_BINS = 80;
+        const dm = (mMax - mMin) / M_STEPS;
+        // b spans approximately [-PW, 2*PW]
+        const bMin = -PW;
+        const bMax = 2 * PW;
+        const db = (bMax - bMin) / B_BINS;
+
+        const acc = new Uint16Array(M_STEPS * B_BINS);
+
+        // Only consider edge pixels on the appropriate side of the frame's vertical center.
+        const centerX = PW / 2;
+        for (let y = ROI.topY; y <= ROI.botY; y++) {
+          const row = y * PW;
+          for (let x = 0; x < PW; x++) {
+            if (edges[row + x] === 0) continue;
+            if (side < 0 && x > centerX + 20) continue;
+            if (side > 0 && x < centerX - 20) continue;
+            for (let mi = 0; mi < M_STEPS; mi++) {
+              const m = mMin + (mi + 0.5) * dm;
+              const b = x - m * y;
+              const bi = Math.floor((b - bMin) / db);
+              if (bi < 0 || bi >= B_BINS) continue;
+              acc[mi * B_BINS + bi]++;
+            }
+          }
+        }
+
+        // Find max bin
+        let best = 0, bestMi = -1, bestBi = -1;
+        for (let mi = 0; mi < M_STEPS; mi++) {
+          for (let bi = 0; bi < B_BINS; bi++) {
+            const v = acc[mi * B_BINS + bi];
+            if (v > best) { best = v; bestMi = mi; bestBi = bi; }
+          }
+        }
+        if (best < 18) return null;  // not enough support
+        const m = mMin + (bestMi + 0.5) * dm;
+        const b = bMin + (bestBi + 0.5) * db;
+        return { m, b, votes: best };
+      }
+
+      function smoothLine(prev, cur) {
+        if (!cur) return prev; // keep previous if no detection this frame
+        if (!prev) return cur;
+        return {
+          m: prev.m * SMOOTH + cur.m * (1 - SMOOTH),
+          b: prev.b * SMOOTH + cur.b * (1 - SMOOTH),
+          votes: cur.votes,
+        };
+      }
+
+      // ---- Drawing ----
+
+      function drawOverlay(left, right, departing) {
+        const W = overlay.width;
+        const H = overlay.height;
+        const sx = W / PW;
+        const sy = H / PH;
+        octx.clearRect(0, 0, W, H);
+
+        // Debug: overlay edge pixels
+        if (debugEdges) {
+          octx.fillStyle = "rgba(255, 255, 0, 0.5)";
+          for (let y = ROI.topY; y <= ROI.botY; y += 2) {
+            const row = y * PW;
+            for (let x = 0; x < PW; x += 2) {
+              if (edges[row + x]) {
+                octx.fillRect(x * sx, y * sy, 2 * sx, 2 * sy);
+              }
+            }
+          }
+        }
+
+        const yTop = ROI.topY;
+        const yBot = ROI.botY;
+
+        const linePts = (ln) => {
+          if (!ln) return null;
+          return {
+            xTop: ln.m * yTop + ln.b,
+            xBot: ln.m * yBot + ln.b,
+          };
+        };
+
+        const L = linePts(left);
+        const R = linePts(right);
+
+        // Fill lane area if both present
+        if (L && R) {
+          octx.fillStyle = departing
+            ? "rgba(255, 60, 60, 0.18)"
+            : "rgba(0, 255, 120, 0.18)";
+          octx.beginPath();
+          octx.moveTo(L.xTop * sx, yTop * sy);
+          octx.lineTo(L.xBot * sx, yBot * sy);
+          octx.lineTo(R.xBot * sx, yBot * sy);
+          octx.lineTo(R.xTop * sx, yTop * sy);
+          octx.closePath();
+          octx.fill();
+        }
+
+        const drawLine = (ln) => {
+          if (!ln) return;
+          octx.strokeStyle = departing ? "#ff4040" : "#00ff80";
+          octx.lineWidth = 4 * devicePixelRatio;
+          octx.lineCap = "round";
+          octx.beginPath();
+          octx.moveTo(ln.xTop * sx, yTop * sy);
+          octx.lineTo(ln.xBot * sx, yBot * sy);
+          octx.stroke();
+        };
+        drawLine(L);
+        drawLine(R);
+
+        // Car-center indicator (vertical line at image center, near bottom)
+        octx.strokeStyle = "rgba(255,255,255,0.7)";
+        octx.lineWidth = 2 * devicePixelRatio;
+        octx.beginPath();
+        octx.moveTo(W / 2, H * 0.85);
+        octx.lineTo(W / 2, H * 0.98);
+        octx.stroke();
+
+        // Lane center marker
+        if (L && R) {
+          const laneCenter = ((L.xBot + R.xBot) / 2) * sx;
+          octx.fillStyle = departing ? "#ff4040" : "#00ff80";
+          octx.beginPath();
+          octx.arc(laneCenter, H * 0.93, 6 * devicePixelRatio, 0, Math.PI * 2);
+          octx.fill();
+        }
+      }
+
+      // ---- Main loop ----
+
+      let lastT = performance.now();
+      let frames = 0;
+      let lastFpsUpdate = lastT;
+
+      function loop() {
+        if (video.readyState >= 2) {
+          // Draw video to small work canvas
+          wctx.drawImage(video, 0, 0, PW, PH);
+          const img = wctx.getImageData(0, 0, PW, PH);
+          toGray(img);
+          sobel(70);
+
+          const rawLeft = houghLineFit(-1);
+          const rawRight = houghLineFit(+1);
+          smoothLeft = smoothLine(smoothLeft, rawLeft);
+          smoothRight = smoothLine(smoothRight, rawRight);
+
+          // Decay: forget old lines if not seen for a while
+          if (!rawLeft && smoothLeft) smoothLeft.votes -= 1;
+          if (!rawRight && smoothRight) smoothRight.votes -= 1;
+          if (smoothLeft && smoothLeft.votes < 5) smoothLeft = null;
+          if (smoothRight && smoothRight.votes < 5) smoothRight = null;
+
+          // Departure: car center vs lane bounds at bottom of ROI
+          let departing = false;
+          let stateText = "scanning…";
+          const carX = PW / 2;
+          if (smoothLeft && smoothRight) {
+            const lx = smoothLeft.m * ROI.botY + smoothLeft.b;
+            const rx = smoothRight.m * ROI.botY + smoothRight.b;
+            const margin = 6; // px in processing-resolution
+            if (carX < lx + margin || carX > rx - margin) {
+              departing = true;
+              stateText = "DEPARTURE";
+            } else {
+              const laneCenter = (lx + rx) / 2;
+              const off = ((carX - laneCenter) / ((rx - lx) / 2)) * 100;
+              stateText = `centered ${off >= 0 ? "+" : ""}${off.toFixed(0)}%`;
+            }
+          } else if (smoothLeft || smoothRight) {
+            stateText = "one line only";
+          }
+
+          drawOverlay(smoothLeft, smoothRight, departing);
+
+          // Departure UI + edge-triggered vibrate
+          departEl.style.display = departing ? "block" : "none";
+          if (departing && prevInside && vibrateOn && "vibrate" in navigator) {
+            navigator.vibrate(220);
+          }
+          prevInside = !departing;
+          stateEl.textContent = stateText;
+        }
+
+        frames++;
+        const now = performance.now();
+        if (now - lastFpsUpdate >= 500) {
+          const fps = (frames * 1000) / (now - lastFpsUpdate);
+          fpsEl.textContent = `${fps.toFixed(0)} fps`;
+          frames = 0;
+          lastFpsUpdate = now;
+        }
+        requestAnimationFrame(loop);
+      }
+    </script>
+  </body>
+</html>
